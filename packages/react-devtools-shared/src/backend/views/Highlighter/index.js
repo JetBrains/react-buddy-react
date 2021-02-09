@@ -34,6 +34,8 @@ export default function setupHighlighter(
   bridge.addListener('startInspectingNative', startInspectingNative);
   bridge.addListener('stopInspectingNative', stopInspectingNative);
 
+  startInspectingNative()
+
   function startInspectingNative() {
     registerListenersOnWindow(window);
   }
@@ -53,15 +55,15 @@ export default function setupHighlighter(
 
   function stopInspectingNative() {
     hideOverlay();
-    removeListenersOnWindow(window);
-    iframesListeningTo.forEach(function(frame) {
-      try {
-        removeListenersOnWindow(frame.contentWindow);
-      } catch (error) {
-        // This can error when the iframe is on a cross-origin.
-      }
-    });
-    iframesListeningTo = new Set();
+    // removeListenersOnWindow(window);
+    // iframesListeningTo.forEach(function(frame) {
+    //   try {
+    //     removeListenersOnWindow(frame.contentWindow);
+    //   } catch (error) {
+    //     // This can error when the iframe is on a cross-origin.
+    //   }
+    // });
+    // iframesListeningTo = new Set();
   }
 
   function removeListenersOnWindow(window) {
@@ -186,6 +188,15 @@ export default function setupHighlighter(
       const id = agent.getIDForNode(node);
       if (id !== null) {
         bridge.send('selectFiber', id);
+        if (typeof window.cefQuery === 'function') {
+          const elementWithSource = traverseToElementWithSource(id)
+          if (elementWithSource == null) {
+            return
+          }
+          console.log(elementWithSource.value.displayName, elementWithSource.value)
+          window.cefQuery({request: elementWithSource.value.source.fileName +
+              ':' + elementWithSource.value.source.lineNumber+':'+elementWithSource.value.source.columnNumber});
+        }
       }
     }),
     200,
@@ -193,4 +204,24 @@ export default function setupHighlighter(
     // because those are usually unintentional as you lift the cursor.
     {leading: false},
   );
+
+  function traverseToElementWithSource(id) {
+    // todo vm pass rendererID
+    const renderer = agent.rendererInterfaces[1];
+    if (renderer == null) {
+      console.warn(`Invalid renderer id "${1}" for element "${id}"`);
+      return
+    }
+    const inspectedElement = renderer.inspectElement(id, undefined);
+    if (!inspectedElement) return null;
+    const elInfo = inspectedElement.value;
+    if (elInfo.source) return inspectedElement;
+
+    for (let i = 0; i < elInfo.owners.length; i++) {
+      const ownerEl = renderer.inspectElement(elInfo.owners[i].id);
+      if (ownerEl?.value?.source) {
+        return ownerEl
+      }
+    }
+  }
 }

@@ -34,6 +34,7 @@ class OverlayRect {
     this.border.style.borderColor = overlayStyles.border;
     this.padding.style.borderColor = overlayStyles.padding;
     this.content.style.backgroundColor = overlayStyles.background;
+    this.content.style.border = `1px solid red`;
 
     assign(this.node.style, {
       borderColor: overlayStyles.margin,
@@ -323,7 +324,7 @@ function boxWrap(dims, what, node) {
 }
 
 const overlayStyles = {
-  background: 'rgba(120, 170, 210, 0.7)',
+  background: 'rgb(255,0,0,0.1)',
   padding: 'rgba(77, 200, 0, 0.3)',
   margin: 'rgba(255, 155, 0, 0.3)',
   border: 'rgba(255, 200, 50, 0.3)',
