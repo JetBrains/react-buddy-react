@@ -25,6 +25,7 @@ chrome-user-data
 *.swo
 
 packages/react-devtools-core/dist
+packages/react-devtools-core-no-server/dist
 packages/react-devtools-extensions/chrome/build
 packages/react-devtools-extensions/chrome/*.crx
 packages/react-devtools-extensions/chrome/*.pem
