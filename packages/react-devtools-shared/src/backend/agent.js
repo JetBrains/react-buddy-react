@@ -286,7 +286,7 @@ export default class Agent extends EventEmitter<{|
     return renderer.getInstanceAndStyle(id);
   }
 
-  getIDForNode(node: Object): number | null {
+  getIDForNode(node: Object): Object | null {
     for (const rendererID in this._rendererInterfaces) {
       const renderer = ((this._rendererInterfaces[
         (rendererID: any)
@@ -295,7 +295,7 @@ export default class Agent extends EventEmitter<{|
       try {
         const id = renderer.getFiberIDForNative(node, true);
         if (id !== null) {
-          return id;
+          return {id, rendererID};
         }
       } catch (error) {
         // Some old React versions might throw if they can't find a match.
@@ -512,7 +512,7 @@ export default class Agent extends EventEmitter<{|
   };
 
   selectNode(target: Object): void {
-    const id = this.getIDForNode(target);
+    const {id = null} = {...this.getIDForNode(target)};
     if (id !== null) {
       this._bridge.send('selectFiber', id);
     }

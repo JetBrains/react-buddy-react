@@ -27,7 +27,7 @@ module.exports = {
   mode: __DEV__ ? 'development' : 'production',
   devtool: __DEV__ ? 'cheap-module-eval-source-map' : 'source-map',
   entry: {
-    'devtools-no-server': './src/devtools-no-server.js',
+    'devtools-no-server': './src/index.js',
   },
   output: {
     path: __dirname + '/dist',

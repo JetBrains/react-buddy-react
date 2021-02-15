@@ -924,7 +924,7 @@ export function attach(
   const fiberToIDMap: Map<Fiber, number> = new Map();
   const idToFiberMap: Map<number, Fiber> = new Map();
   const primaryFibers: Set<Fiber> = new Set();
-
+  const fibersSourceData = [];
   // When profiling is supported, we store the latest tree base durations for each Fiber.
   // This is so that we can quickly capture a snapshot of those values if profiling starts.
   // If we didn't store these values, we'd have to crawl the tree when profiling started,
@@ -938,11 +938,34 @@ export function attach(
   // When a mount or update is in progress, this value tracks the root that is being operated on.
   let currentRootID: number = -1;
 
+  function addFibersSourceDataItem (id: string, fiber: Fiber) {
+    const {_debugSource} = fiber;
+    if (_debugSource && fibersSourceData.findIndex((item) => id === item.id) === -1) {
+      const {fileName, lineNumber, columnNumber} = _debugSource;
+      const {elementType: {name: displayName}} = fiber;
+      fibersSourceData.push({
+        id,
+        fileName,
+        lineNumber,
+        columnNumber,
+        displayName
+      });
+    }
+  }
+
+  function removeFibersSourceDataItem (id: string) {
+    const removeIdx = fibersSourceData.findIndex((item) => id === item.id);
+    if (removeIdx > -1) {
+      fibersSourceData.splice(removeIdx, 1);
+    }
+  }
+
   function getFiberID(primaryFiber: Fiber): number {
     if (!fiberToIDMap.has(primaryFiber)) {
       const id = getUID();
       fiberToIDMap.set(primaryFiber, id);
       idToFiberMap.set(id, primaryFiber);
+      addFibersSourceDataItem(id, primaryFiber);
     }
     return ((fiberToIDMap.get(primaryFiber): any): number);
   }
@@ -1192,6 +1215,7 @@ export function attach(
           fiberToIDMap.delete(fiber);
           idToFiberMap.delete(fiberID);
           primaryFibers.delete(fiber);
+          removeFibersSourceDataItem(fiberID);
           return;
         }
 
@@ -1466,6 +1490,7 @@ export function attach(
     fiberToIDMap.delete(primaryFiber);
     idToFiberMap.delete(id);
     primaryFibers.delete(primaryFiber);
+    removeFibersSourceDataItem(id);
 
     const isProfilingSupported = fiber.hasOwnProperty('treeBaseDuration');
     if (isProfilingSupported) {
@@ -2843,9 +2868,6 @@ export function attach(
       const key = `$reactTemp${count}`;
 
       window[key] = value;
-
-      console.log(key);
-      console.log(value);
     }
   }
 
@@ -3629,6 +3651,12 @@ export function attach(
     traceUpdatesEnabled = isEnabled;
   }
 
+  function findFibersSourceData (file: string, line: number) {
+    return fibersSourceData.find(({fileName, lineNumber}) => {
+      return (file === fileName) && (line === lineNumber);
+    })
+  }
+
   return {
     cleanup,
     clearErrorsAndWarnings,
@@ -3637,6 +3665,7 @@ export function attach(
     copyElementPath,
     deletePath,
     findNativeNodesForFiberID,
+    findFibersSourceData,
     flushInitialOperations,
     getBestMatchForTrackedPath,
     getDisplayNameForFiberID,

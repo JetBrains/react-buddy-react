@@ -185,11 +185,11 @@ export default function setupHighlighter(
 
   const selectFiberForNode = throttle(
     memoize((node: HTMLElement) => {
-      const id = agent.getIDForNode(node);
+      const {id = null, rendererID} = {...agent.getIDForNode(node)};
       if (id !== null) {
         bridge.send('selectFiber', id);
         if (typeof window.cefQuery === 'function') {
-          const elementWithSource = traverseToElementWithSource(id)
+          const elementWithSource = traverseToElementWithSource(id, rendererID);
           if (elementWithSource == null) {
             return
           }
@@ -205,18 +205,17 @@ export default function setupHighlighter(
     {leading: false},
   );
 
-  function traverseToElementWithSource(id) {
-    // todo vm pass rendererID
-    const renderer = agent.rendererInterfaces[1];
+  function traverseToElementWithSource(id, rendererID) {
+    const renderer = agent.rendererInterfaces[rendererID];
     if (renderer == null) {
-      console.warn(`Invalid renderer id "${1}" for element "${id}"`);
+      console.warn(`Invalid renderer id "${rendererID}" for element "${id}"`);
       return
     }
     const inspectedElement = renderer.inspectElement(id, undefined);
     if (!inspectedElement) return null;
     const elInfo = inspectedElement.value;
+    if(!elInfo) return null;
     if (elInfo.source) return inspectedElement;
-
     for (let i = 0; i < elInfo.owners.length; i++) {
       const ownerEl = renderer.inspectElement(elInfo.owners[i].id);
       if (ownerEl?.value?.source) {

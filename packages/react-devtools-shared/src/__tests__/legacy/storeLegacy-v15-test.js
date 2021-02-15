@@ -452,7 +452,7 @@ describe('Store (legacy)', () => {
       );
       expect(store).toMatchSnapshot('1: mount');
 
-      const deepestedNodeID = global.agent.getIDForNode(ref);
+      const {id :deepestedNodeID = null} = {...global.agent.getIDForNode(ref)};
 
       act(() => store.toggleIsCollapsed(deepestedNodeID, false));
       expect(store).toMatchSnapshot('2: expand deepest node');

@@ -637,7 +637,7 @@ describe('Store', () => {
       );
       expect(store).toMatchSnapshot('1: mount');
 
-      const deepestedNodeID = agent.getIDForNode(ref.current);
+      const {id :deepestedNodeID = null} = {...agent.getIDForNode(ref.current)};
 
       act(() => store.toggleIsCollapsed(deepestedNodeID, false));
       expect(store).toMatchSnapshot('2: expand deepest node');
