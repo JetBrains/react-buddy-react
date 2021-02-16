@@ -1,4 +1,5 @@
 import type {ComponentFilter} from 'react-devtools-shared/src/types';
+import {ComponentFilterElementType, ElementTypeOtherOrUnknown} from 'react-devtools-shared/src/types';
 import {
     getAppendComponentStack,
     getBreakOnConsoleErrors,
@@ -7,6 +8,16 @@ import {
   } from 'react-devtools-shared/src/utils';
 import {getDefaultComponentFilters} from 'react-devtools-shared/src/utils';
 import {debounceWrapper} from "./devtools-init.utils";
+
+export function initComponentFilters(target) {
+    target.__REACT_DEVTOOLS_COMPONENT_FILTERS__ = [
+        {
+            type: ComponentFilterElementType,
+            value: ElementTypeOtherOrUnknown,
+            isEnabled: true
+        }
+    ]
+}
 
 export function savedPreferencesString() {
     window.__REACT_DEVTOOLS_APPEND_COMPONENT_STACK__ = getAppendComponentStack();
