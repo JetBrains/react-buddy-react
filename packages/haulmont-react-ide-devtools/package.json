@@ -1,12 +1,14 @@
 {
-  "name": "react-devtools-core-no-server",
-  "version": "1.0.0",
-  "description": "Use abilities of react-devtools on frontend side without server",
+  "name": "@haulmont/react-ide-devtools",
+  "version": "0.2.0",
+  "description": "Embedded react devtools for IDE support",
   "main": "index.js",
+  "files": [
+    "dist/"
+  ],
   "scripts": {
     "build:prod": "cross-env NODE_ENV=production webpack --config webpack.devtools-no-server.js",
     "build:dev": "cross-env NODE_ENV=development webpack --config webpack.devtools-no-server.js"
   },
-  "author": "Roman Karandashov",
-  "license": "ISC"
+  "author": "Haulmont <info@haulmont.com>"
 }
