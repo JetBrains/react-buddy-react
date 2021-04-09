@@ -6,7 +6,15 @@ import Agent from 'react-devtools-shared/src/backend/agent';
 import Bridge, {BackendBridge} from 'react-devtools-shared/src/bridge';
 import {installHook} from 'react-devtools-shared/src/hook';
 import {initBackend} from 'react-devtools-shared/src/backend';
-import {updateBridge, savedPreferencesString, installHighlighter, initComponentFilters} from './devtools-init';
+import {
+    updateBridge, 
+    savedPreferencesString, 
+    installHighlighter, 
+    initComponentFilters, 
+    initHighlightngGlobalSettings,
+    installHighlightingModeChangingApi,
+    installHighlightingClickHandler
+} from './devtools-init';
 
 savedPreferencesString();
 installHook(window);
@@ -24,4 +32,7 @@ const agent = new Agent(bridge);
 updateBridge(bridge, agent);
 initBackend(hook, agent, window);
 
+initHighlightngGlobalSettings(window);
+installHighlightingModeChangingApi(window);
+installHighlightingClickHandler(window, agent);
 installHighlighter(agent, bridge, window);

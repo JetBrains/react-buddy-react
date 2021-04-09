@@ -28,26 +28,28 @@ export function showOverlay(
   componentName: string | null,
   hideAfterTimeout: boolean,
 ) {
-  // TODO (npm-packages) Detect RN and support it somehow
-  if (window.document == null) {
-    return;
-  }
+  if(window.__HIGHLIGHTING_GLOBAL_SETTINGS__.enabled) {
+    // TODO (npm-packages) Detect RN and support it somehow
+    if (window.document == null) {
+      return;
+    }
 
-  if (timeoutID !== null) {
-    clearTimeout(timeoutID);
-  }
+    if (timeoutID !== null) {
+      clearTimeout(timeoutID);
+    }
 
-  if (elements == null) {
-    return;
-  }
+    if (elements == null) {
+      return;
+    }
 
-  if (overlay === null) {
-    overlay = new Overlay();
-  }
+    if (overlay === null) {
+      overlay = new Overlay();
+    }
 
-  overlay.inspect(elements, componentName);
+    overlay.inspect(elements, componentName);
 
-  if (hideAfterTimeout) {
-    timeoutID = setTimeout(hideOverlay, SHOW_DURATION);
+    if (hideAfterTimeout) {
+      timeoutID = setTimeout(hideOverlay, SHOW_DURATION);
+    }
   }
 }

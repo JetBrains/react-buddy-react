@@ -132,55 +132,67 @@ export default function setupHighlighter(
   }
 
   function onClick(event: MouseEvent) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    stopInspectingNative();
-
-    bridge.send('stopInspectingNative', true);
+    if(window.__HIGHLIGHTING_GLOBAL_SETTINGS__.enabled){
+      event.preventDefault();
+      if(!window.__HIGHLIGHTING_GLOBAL_SETTINGS__.clickHighlightingMode) {
+        event.stopPropagation();
+        stopInspectingNative();
+        bridge.send('stopInspectingNative', true);
+      }
+    }
   }
 
   function onMouseEvent(event: MouseEvent) {
-    event.preventDefault();
-    event.stopPropagation();
+    if(window.__HIGHLIGHTING_GLOBAL_SETTINGS__.enabled){
+      event.preventDefault();
+      event.stopPropagation();
+    }
   }
 
   function onPointerDown(event: MouseEvent) {
-    event.preventDefault();
-    event.stopPropagation();
+    if(window.__HIGHLIGHTING_GLOBAL_SETTINGS__.enabled){
+      event.preventDefault();
+      event.stopPropagation();
 
-    selectFiberForNode(((event.target: any): HTMLElement));
+      selectFiberForNode(((event.target: any): HTMLElement));
+    }
   }
 
   function onPointerOver(event: MouseEvent) {
-    event.preventDefault();
-    event.stopPropagation();
+    if(window.__HIGHLIGHTING_GLOBAL_SETTINGS__.enabled){
+      event.preventDefault();
+      event.stopPropagation();
 
-    const target = ((event.target: any): HTMLElement);
+      const target = ((event.target: any): HTMLElement);
 
-    if (target.tagName === 'IFRAME') {
-      const iframe: HTMLIFrameElement = (target: any);
-      try {
-        if (!iframesListeningTo.has(iframe)) {
-          const window = iframe.contentWindow;
-          registerListenersOnWindow(window);
-          iframesListeningTo.add(iframe);
+      if (target.tagName === 'IFRAME') {
+        const iframe: HTMLIFrameElement = (target: any);
+        try {
+          if (!iframesListeningTo.has(iframe)) {
+            const window = iframe.contentWindow;
+            registerListenersOnWindow(window);
+            iframesListeningTo.add(iframe);
+          }
+        } catch (error) {
+          // This can error when the iframe is on a cross-origin.
         }
-      } catch (error) {
-        // This can error when the iframe is on a cross-origin.
       }
+
+      // Don't pass the name explicitly.
+      // It will be inferred from DOM tag and Fiber owner.
+      if(!window.__HIGHLIGHTING_GLOBAL_SETTINGS__.clickHighlightingMode){
+        showOverlay([target], null, false);
+      }
+
+      selectFiberForNode(target);
     }
-
-    // Don't pass the name explicitly.
-    // It will be inferred from DOM tag and Fiber owner.
-    showOverlay([target], null, false);
-
-    selectFiberForNode(target);
   }
 
   function onPointerUp(event: MouseEvent) {
-    event.preventDefault();
-    event.stopPropagation();
+    if(window.__HIGHLIGHTING_GLOBAL_SETTINGS__.enabled){
+      event.preventDefault();
+      event.stopPropagation();
+    }
   }
 
   const selectFiberForNode = throttle(
@@ -188,7 +200,7 @@ export default function setupHighlighter(
       const {id = null, rendererID} = {...agent.getIDForNode(node)};
       if (id !== null) {
         bridge.send('selectFiber', id);
-        if (typeof window.cefQuery === 'function') {
+        if (typeof window.cefQuery === 'function' && window.__HIGHLIGHTING_GLOBAL_SETTINGS__.hoverHighlightingMode) {
           const elementWithSource = traverseToElementWithSource(id, rendererID);
           if (elementWithSource == null) {
             return

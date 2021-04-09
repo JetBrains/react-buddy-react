@@ -1,3 +1,5 @@
+import memoize from 'memoize-one';
+import throttle from 'lodash.throttle';
 import type {ComponentFilter} from 'react-devtools-shared/src/types';
 import {ComponentFilterElementType, ElementTypeOtherOrUnknown} from 'react-devtools-shared/src/types';
 import {
@@ -8,6 +10,7 @@ import {
   } from 'react-devtools-shared/src/utils';
 import {getDefaultComponentFilters} from 'react-devtools-shared/src/utils';
 import {debounceWrapper} from "./devtools-init.utils";
+import {hideOverlay, showOverlay} from "../../react-devtools-shared/src/backend/views/Highlighter/Highlighter"
 
 export function initComponentFilters(target) {
     target.__REACT_DEVTOOLS_COMPONENT_FILTERS__ = [
@@ -73,4 +76,91 @@ export function installHighlighter(agent, bridge, target) {
         bridge.emit('stopInspectingNative');
     },
     250);
+}
+
+export function initHighlightngGlobalSettings(target) {
+    target.__HIGHLIGHTING_GLOBAL_SETTINGS__ = {
+        enabled: true,
+        hoverHighlightingMode: true,
+        clickHighlightingMode: false
+    }
+}
+
+export function installHighlightingModeChangingApi(target) {
+    target.setClickingHighlightingMode = function () {
+        target.__HIGHLIGHTING_GLOBAL_SETTINGS__ = {
+            enabled: true,
+            hoverHighlightingMode: false,
+            clickHighlightingMode: true 
+        }
+        hideOverlay();
+    }
+
+    target.setHoverHighlightingMode = function () {
+        target.__HIGHLIGHTING_GLOBAL_SETTINGS__ = {
+            enabled: true,
+            hoverHighlightingMode: true,
+            clickHighlightingMode: false 
+        }
+        hideOverlay();
+    }
+
+    target.disableHighlighting = function () {
+        target.__HIGHLIGHTING_GLOBAL_SETTINGS__ = {
+            enabled: false,
+            hoverHighlightingMode: false,
+            clickHighlightingMode: false 
+        }
+        hideOverlay();
+    }
+}
+
+export function installHighlightingClickHandler(target, agent) {
+
+    function traverseToElementWithSource(id, rendererID) {
+        const renderer = agent.rendererInterfaces[rendererID];
+        if (renderer == null) {
+          console.warn(`Invalid renderer id "${rendererID}" for element "${id}"`);
+          return
+        }
+        const inspectedElement = renderer.inspectElement(id, undefined);
+        if (!inspectedElement) return null;
+        const elInfo = inspectedElement.value;
+        if(!elInfo) return null;
+        if (elInfo.source) return inspectedElement;
+        for (let i = 0; i < elInfo.owners.length; i++) {
+          const ownerEl = renderer.inspectElement(elInfo.owners[i].id);
+          if (ownerEl?.value?.source) {
+            return ownerEl
+          }
+        }
+      }
+    
+      const setHighlight = throttle(
+        memoize((node: HTMLElement) => {
+          const {id = null, rendererID} = {...agent.getIDForNode(node)};
+          if (id !== null) {
+            if (typeof target.cefQuery === 'function') {
+              showOverlay([node], null, false);
+              const elementWithSource = traverseToElementWithSource(id, rendererID);
+              if (elementWithSource == null) {
+                return
+              }
+              console.log(elementWithSource.value.displayName, elementWithSource.value)
+              target.cefQuery({request: elementWithSource.value.source.fileName +
+                  ':' + elementWithSource.value.source.lineNumber+':'+elementWithSource.value.source.columnNumber});
+            }
+          }
+        }),
+        200,
+        // Don't change the selection in the very first 200ms
+        // because those are usually unintentional as you lift the cursor.
+        {leading: false},
+      );
+
+    target.addEventListener('click', function(e) {
+        if(target.__HIGHLIGHTING_GLOBAL_SETTINGS__.clickHighlightingMode) {
+            setHighlight(e.target);
+        }
+    })
 }
