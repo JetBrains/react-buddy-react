@@ -81,8 +81,8 @@ export function installHighlighter(agent, bridge, target) {
 export function initHighlightngGlobalSettings(target) {
     target.__HIGHLIGHTING_GLOBAL_SETTINGS__ = {
         enabled: true,
-        hoverHighlightingMode: true,
-        clickHighlightingMode: false
+        hoverHighlightingMode: false,
+        clickHighlightingMode: true
     }
 }
 
