@@ -1,7 +1,8 @@
 {
   "name": "@haulmont/react-ide-devtools",
-  "version": "0.2.0-alpha.3",
+  "version": "0.2.0-alpha.4",
   "description": "Embedded react devtools for IDE support",
+  "main": "index.js",
   "browser": "./dist/devtools-no-server.js",
   "unpkg": "./dist/devtools-no-server.js",
   "files": [
