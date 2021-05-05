@@ -159,8 +159,23 @@ export function installHighlightingClickHandler(target, agent) {
       );
 
     target.addEventListener('click', function(e) {
-        if(target.__HIGHLIGHTING_GLOBAL_SETTINGS__.clickHighlightingMode) {
+        if(target.__HIGHLIGHTING_GLOBAL_SETTINGS__.clickHighlightingMode && target.isHighlightingEnabled()) {
+            e.preventDefault()
+            e.stopPropagation();
             setHighlight(e.target);
         }
-    })
+    }, true);
+}
+
+export function installComponentsPropertiesEditorApi(target) {
+    target.__PROPERTIES_EDIT_PANEL_ENABLED__ = false;
+
+    target.setPropertiesEditPanelStatus = function(status) {
+        target.__PROPERTIES_EDIT_PANEL_ENABLED__ = status;
+        hideOverlay();
+    }
+
+    target.isHighlightingEnabled = function() {
+        return (target.__HIGHLIGHTING_GLOBAL_SETTINGS__.enabled && !target.__PROPERTIES_EDIT_PANEL_ENABLED__)
+    }
 }

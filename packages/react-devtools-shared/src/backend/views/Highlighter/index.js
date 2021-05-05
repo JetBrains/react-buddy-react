@@ -132,7 +132,7 @@ export default function setupHighlighter(
   }
 
   function onClick(event: MouseEvent) {
-    if(window.__HIGHLIGHTING_GLOBAL_SETTINGS__.enabled){
+    if(window.isHighlightingEnabled()){
       event.preventDefault();
       if(!window.__HIGHLIGHTING_GLOBAL_SETTINGS__.clickHighlightingMode) {
         event.stopPropagation();
@@ -143,14 +143,14 @@ export default function setupHighlighter(
   }
 
   function onMouseEvent(event: MouseEvent) {
-    if(window.__HIGHLIGHTING_GLOBAL_SETTINGS__.enabled){
+    if(window.isHighlightingEnabled()){
       event.preventDefault();
       event.stopPropagation();
     }
   }
 
   function onPointerDown(event: MouseEvent) {
-    if(window.__HIGHLIGHTING_GLOBAL_SETTINGS__.enabled){
+    if(window.isHighlightingEnabled()){
       event.preventDefault();
       event.stopPropagation();
 
@@ -159,7 +159,7 @@ export default function setupHighlighter(
   }
 
   function onPointerOver(event: MouseEvent) {
-    if(window.__HIGHLIGHTING_GLOBAL_SETTINGS__.enabled){
+    if(window.isHighlightingEnabled()){
       event.preventDefault();
       event.stopPropagation();
 
@@ -189,7 +189,7 @@ export default function setupHighlighter(
   }
 
   function onPointerUp(event: MouseEvent) {
-    if(window.__HIGHLIGHTING_GLOBAL_SETTINGS__.enabled){
+    if(window.isHighlightingEnabled()){
       event.preventDefault();
       event.stopPropagation();
     }

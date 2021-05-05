@@ -28,7 +28,7 @@ export function showOverlay(
   componentName: string | null,
   hideAfterTimeout: boolean,
 ) {
-  if(window.__HIGHLIGHTING_GLOBAL_SETTINGS__.enabled) {
+  if(window.isHighlightingEnabled()) {
     // TODO (npm-packages) Detect RN and support it somehow
     if (window.document == null) {
       return;

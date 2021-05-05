@@ -13,7 +13,8 @@ import {
     initComponentFilters, 
     initHighlightngGlobalSettings,
     installHighlightingModeChangingApi,
-    installHighlightingClickHandler
+    installHighlightingClickHandler,
+    installComponentsPropertiesEditorApi
 } from './devtools-init';
 
 savedPreferencesString();
@@ -33,6 +34,7 @@ updateBridge(bridge, agent);
 initBackend(hook, agent, window);
 
 initHighlightngGlobalSettings(window);
+installComponentsPropertiesEditorApi(window);
 installHighlightingModeChangingApi(window);
 installHighlightingClickHandler(window, agent);
 installHighlighter(agent, bridge, window);
