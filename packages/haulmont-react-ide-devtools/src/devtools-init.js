@@ -29,6 +29,12 @@ export function savedPreferencesString() {
     window.__REACT_DEVTOOLS_SHOW_INLINE_WARNINGS_AND_ERRORS__ = getShowInlineWarningsAndErrors();
 }
 
+export function sendSuccessInitMessage() {
+    if(typeof window.cefQuery === "function") {
+        window.cefQuery({request: "event:react-toolbox-initialized"});
+    }
+}
+
 export function updateBridge(bridge, agent) {
 
     let savedComponentFilters: Array<ComponentFilter> = getDefaultComponentFilters();
