@@ -1,6 +1,6 @@
 {
   "name": "@haulmont/react-ide-devtools",
-  "version": "0.2.0-alpha.6",
+  "version": "1.0.0",
   "description": "Embedded react devtools for IDE support",
   "main": "./dist/devtools-no-server.js",
   "browser": "./dist/devtools-no-server.js",
