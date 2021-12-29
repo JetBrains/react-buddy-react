@@ -16,6 +16,8 @@ let overlay: Overlay | null = null;
 
 export function hideOverlay() {
   timeoutID = null;
+  window.onresize = null;
+  document.querySelector(".previews-content").onscroll = null;
 
   if (overlay !== null) {
     overlay.remove();
@@ -46,7 +48,17 @@ export function showOverlay(
       overlay = new Overlay();
     }
 
-    overlay.inspect(elements, componentName);
+    const inspecting = () => {
+      overlay.inspect(elements, componentName);
+    }
+
+    const resizeAndScrollHandler = () => {
+      inspecting();
+    }
+
+    inspecting();
+    window.onresize = resizeAndScrollHandler;
+    document.querySelector(".previews-content").onscroll = resizeAndScrollHandler;
 
     if (hideAfterTimeout) {
       timeoutID = setTimeout(hideOverlay, SHOW_DURATION);
