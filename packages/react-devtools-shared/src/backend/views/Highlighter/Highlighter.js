@@ -13,11 +13,13 @@ const SHOW_DURATION = 2000;
 
 let timeoutID: TimeoutID | null = null;
 let overlay: Overlay | null = null;
+let resizeAndScrollHandler = null;
 
 export function hideOverlay() {
   timeoutID = null;
   window.onresize = null;
-  document.querySelector(".previews-content").onscroll = null;
+  window.removeEventListener("scroll", resizeAndScrollHandler, true);
+  resizeAndScrollHandler = null;
 
   if (overlay !== null) {
     overlay.remove();
@@ -52,13 +54,20 @@ export function showOverlay(
       overlay.inspect(elements, componentName);
     }
 
-    const resizeAndScrollHandler = () => {
+    const resizeAndScrollCallback = () => {
       inspecting();
     }
 
     inspecting();
+
+    if(resizeAndScrollHandler !== null) {
+      window.removeEventListener("scroll", resizeAndScrollHandler, true);
+    }
+
+    resizeAndScrollHandler = resizeAndScrollCallback;
+
     window.onresize = resizeAndScrollHandler;
-    document.querySelector(".previews-content").onscroll = resizeAndScrollHandler;
+    window.addEventListener("scroll", resizeAndScrollHandler, true);
 
     if (hideAfterTimeout) {
       timeoutID = setTimeout(hideOverlay, SHOW_DURATION);
