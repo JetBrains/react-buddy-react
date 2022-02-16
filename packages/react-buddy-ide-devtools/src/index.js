@@ -18,13 +18,15 @@ import {
     sendSuccessInitMessage
 } from './devtools-init';
 
+window.REACT_BUDDY_IDE_DEVMODE = true;
+
 savedPreferencesString();
 installHook(window);
 initComponentFilters(window);
 
 const hook: ?DevToolsHook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;  
 const bridge: BackendBridge = new Bridge({
-    listen(){},
+    listen() {},
     send(event: string, payload: any) {
         agent.emit(event, payload);
     }
