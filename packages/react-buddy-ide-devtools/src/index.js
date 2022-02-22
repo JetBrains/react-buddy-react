@@ -41,4 +41,3 @@ installComponentsPropertiesEditorApi(window);
 installHighlightingModeChangingApi(window);
 installHighlightingClickHandler(window, agent);
 installHighlighter(agent, bridge, window);
-sendSuccessInitMessage();
