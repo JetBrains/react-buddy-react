@@ -1,6 +1,6 @@
 {
   "name": "@react-buddy/ide-devtools",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Embedded react devtools for IDE support",
   "main": "./dist/devtools-no-server.js",
   "browser": "./dist/devtools-no-server.js",
@@ -15,5 +15,11 @@
   "author": "Haulmont <info@haulmont.com>",
   "publishConfig": {
     "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/react-buddy/react",
+    "directory": "packages/react-buddy-ide-devtools"
   }
 }
