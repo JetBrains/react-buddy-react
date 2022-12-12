@@ -149,7 +149,13 @@ function ComponentWithMissingKey({children}) {
   return [<div />];
 }
 
-export default function ErrorsAndWarnings() {
+function ComponentWithSymbolWarning() {
+  console.warn('this is a symbol', Symbol('foo'));
+  console.error('this is a symbol', Symbol.for('bar'));
+  return null;
+}
+
+export default function ErrorsAndWarnings(): React.Node {
   const [count, setCount] = useState(0);
   const handleClick = () => setCount(count + 1);
   return (
@@ -176,6 +182,7 @@ export default function ErrorsAndWarnings() {
       <ReallyLongErrorMessageThatWillCauseTextToBeTruncated />
       <DuplicateWarningsAndErrors />
       <MultipleWarningsAndErrors />
+      <ComponentWithSymbolWarning />
     </Fragment>
   );
 }

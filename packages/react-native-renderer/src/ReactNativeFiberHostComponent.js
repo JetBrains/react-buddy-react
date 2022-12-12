@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -14,7 +14,7 @@ import type {
   MeasureLayoutOnSuccessCallback,
   MeasureOnSuccessCallback,
   NativeMethods,
-  ReactNativeBaseComponentViewConfig,
+  ViewConfig,
 } from './ReactNativeTypes';
 import type {Instance} from './ReactNativeHostConfig';
 
@@ -34,11 +34,11 @@ class ReactNativeFiberHostComponent {
   _children: Array<Instance | number>;
   _nativeTag: number;
   _internalFiberInstanceHandleDEV: Object;
-  viewConfig: ReactNativeBaseComponentViewConfig<>;
+  viewConfig: ViewConfig;
 
   constructor(
     tag: number,
-    viewConfig: ReactNativeBaseComponentViewConfig<>,
+    viewConfig: ViewConfig,
     internalInstanceHandleDEV: Object,
   ) {
     this._nativeTag = tag;
@@ -127,6 +127,8 @@ class ReactNativeFiberHostComponent {
 }
 
 // eslint-disable-next-line no-unused-expressions
-(ReactNativeFiberHostComponent.prototype: NativeMethods);
+// $FlowFixMe[class-object-subtyping] found when upgrading Flow
+// $FlowFixMe[method-unbinding] found when upgrading Flow
+(ReactNativeFiberHostComponent.prototype: $ReadOnly<{...NativeMethods, ...}>);
 
 export default ReactNativeFiberHostComponent;

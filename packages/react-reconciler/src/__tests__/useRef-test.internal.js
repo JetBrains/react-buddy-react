@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -31,7 +31,7 @@ describe('useRef', () => {
     const ReactFeatureFlags = require('shared/ReactFeatureFlags');
     ReactFeatureFlags.debugRenderPhaseSideEffectsForStrictMode = false;
 
-    act = ReactNoop.act;
+    act = require('jest-react').act;
     useCallback = React.useCallback;
     useEffect = React.useEffect;
     useLayoutEffect = React.useLayoutEffect;

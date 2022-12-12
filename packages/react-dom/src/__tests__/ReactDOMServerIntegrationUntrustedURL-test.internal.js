@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -241,6 +241,11 @@ describe('ReactDOMServerIntegration - Untrusted URLs - disableJavaScriptURLs', (
       // TODO: It would be good if we only called toString once for
       // consistency but the code structure makes that hard right now.
       expectedToStringCalls = 2;
+    }
+    if (__DEV__) {
+      // Checking for string coercion problems results in double the
+      // toString calls in DEV
+      expectedToStringCalls *= 2;
     }
 
     let toStringCalls = 0;

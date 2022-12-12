@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,10 +9,12 @@
 
 import * as React from 'react';
 import {
+  createContext,
   forwardRef,
   Fragment,
   memo,
   useCallback,
+  useContext,
   useDebugValue,
   useEffect,
   useState,
@@ -64,8 +66,13 @@ function useDeepHookF() {
   useDebugValue('useDeepHookF');
 }
 
+const ContextA = createContext('A');
+const ContextB = createContext('B');
+
 function FunctionWithHooks(props: any, ref: React$Ref<any>) {
   const [count, updateCount] = useState(0);
+  // eslint-disable-next-line no-unused-vars
+  const contextValueA = useContext(ContextA);
 
   // eslint-disable-next-line no-unused-vars
   const [_, __] = useState(object);
@@ -85,6 +92,9 @@ function FunctionWithHooks(props: any, ref: React$Ref<any>) {
   // Tests nested custom hooks
   useNestedOuterHook();
 
+  // eslint-disable-next-line no-unused-vars
+  const contextValueB = useContext(ContextB);
+
   // Verify deep nesting doesn't break
   useDeepHookA();
 
@@ -99,12 +109,13 @@ function wrapWithHoc(Component) {
   }
   // $FlowFixMe
   const displayName = Component.displayName || Component.name;
+  // $FlowFixMe[incompatible-type] found when upgrading Flow
   Hoc.displayName = `withHoc(${displayName})`;
   return Hoc;
 }
 const HocWithHooks = wrapWithHoc(FunctionWithHooks);
 
-export default function CustomHooks() {
+export default function CustomHooks(): React.Node {
   return (
     <Fragment>
       <FunctionWithHooks />

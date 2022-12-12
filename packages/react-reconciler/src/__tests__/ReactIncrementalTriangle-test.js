@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -433,6 +433,7 @@ describe('ReactIncrementalTriangle', () => {
       }
       // Flush remaining work
       Scheduler.unstable_flushAllWithoutAsserting();
+      ReactNoop.flushSync();
       assertConsistentTree(activeLeafIndices, expectedCounterAtEnd);
     }
 
@@ -561,6 +562,12 @@ ${formatActions(actions)}
         ['c', step(1)],
         ['b', flush(7)],
         ['c', toggle(0)],
+      );
+
+      simulateMultipleRoots(
+        ['c', step(1)],
+        ['c', expire(5000)],
+        ['b', toggle(1)],
       );
     });
 

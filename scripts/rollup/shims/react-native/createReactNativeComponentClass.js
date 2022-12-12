@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,8 +11,7 @@
 'use strict';
 
 import {ReactNativeViewConfigRegistry} from 'react-native/Libraries/ReactPrivate/ReactNativePrivateInterface';
-
-import type {ViewConfigGetter} from './ReactNativeTypes';
+import {type ViewConfig} from './ReactNativeTypes';
 
 const {register} = ReactNativeViewConfigRegistry;
 
@@ -26,7 +25,7 @@ const {register} = ReactNativeViewConfigRegistry;
  */
 const createReactNativeComponentClass = function(
   name: string,
-  callback: ViewConfigGetter,
+  callback: () => ViewConfig,
 ): string {
   return register(name, callback);
 };

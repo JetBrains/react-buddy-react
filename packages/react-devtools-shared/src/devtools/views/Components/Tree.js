@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -23,34 +23,35 @@ import {FixedSizeList} from 'react-window';
 import {TreeDispatcherContext, TreeStateContext} from './TreeContext';
 import Icon from '../Icon';
 import {SettingsContext} from '../Settings/SettingsContext';
-import {BridgeContext, StoreContext} from '../context';
+import {BridgeContext, StoreContext, OptionsContext} from '../context';
 import Element from './Element';
 import InspectHostNodesToggle from './InspectHostNodesToggle';
 import OwnersStack from './OwnersStack';
-import SearchInput from './SearchInput';
+import ComponentSearchInput from './ComponentSearchInput';
 import SettingsModalContextToggle from 'react-devtools-shared/src/devtools/views/Settings/SettingsModalContextToggle';
 import SelectedTreeHighlight from './SelectedTreeHighlight';
 import TreeFocusedContext from './TreeFocusedContext';
 import {useHighlightNativeElement, useSubscription} from '../hooks';
-
+import {clearErrorsAndWarnings as clearErrorsAndWarningsAPI} from 'react-devtools-shared/src/backendAPI';
 import styles from './Tree.css';
 import ButtonIcon from '../ButtonIcon';
 import Button from '../Button';
+import {logEvent} from 'react-devtools-shared/src/Logger';
 
 // Never indent more than this number of pixels (even if we have the room).
 const DEFAULT_INDENTATION_SIZE = 12;
 
-export type ItemData = {|
+export type ItemData = {
   numElements: number,
   isNavigatingWithKeyboard: boolean,
   lastScrolledIDRef: {current: number | null, ...},
   onElementMouseEnter: (id: number) => void,
   treeFocused: boolean,
-|};
+};
 
-type Props = {||};
+type Props = {};
 
-export default function Tree(props: Props) {
+export default function Tree(props: Props): React.Node {
   const dispatch = useContext(TreeDispatcherContext);
   const {
     numElements,
@@ -62,6 +63,7 @@ export default function Tree(props: Props) {
   } = useContext(TreeStateContext);
   const bridge = useContext(BridgeContext);
   const store = useContext(StoreContext);
+  const {hideSettings} = useContext(OptionsContext);
   const [isNavigatingWithKeyboard, setIsNavigatingWithKeyboard] = useState(
     false,
   );
@@ -102,6 +104,10 @@ export default function Tree(props: Props) {
     function handleStopInspectingNative(didSelectNode) {
       if (didSelectNode && focusTargetRef.current !== null) {
         focusTargetRef.current.focus();
+        logEvent({
+          event_name: 'select-element',
+          metadata: {source: 'inspector'},
+        });
       }
     }
     bridge.addListener('stopInspectingNative', handleStopInspectingNative);
@@ -124,10 +130,6 @@ export default function Tree(props: Props) {
       if ((event: any).target.tagName === 'INPUT' || event.defaultPrevented) {
         return;
       }
-
-      // TODO We should ignore arrow keys if the focus is outside of DevTools.
-      // Otherwise the inline (embedded) DevTools might change selection unexpectedly,
-      // e.g. when a text input or a select has focus.
 
       let element;
       switch (event.key) {
@@ -191,14 +193,25 @@ export default function Tree(props: Props) {
       setIsNavigatingWithKeyboard(true);
     };
 
-    // It's important to listen to the ownerDocument to support the browser extension.
-    // Here we use portals to render individual tabs (e.g. Profiler),
-    // and the root document might belong to a different window.
-    const ownerDocument = treeRef.current.ownerDocument;
-    ownerDocument.addEventListener('keydown', handleKeyDown);
+    // We used to listen to at the document level for this event.
+    // That allowed us to listen to up/down arrow key events while another section
+    // of DevTools (like the search input) was focused.
+    // This was a minor UX positive.
+    //
+    // (We had to use ownerDocument rather than document for this, because the
+    // DevTools extension renders the Components and Profiler tabs into portals.)
+    //
+    // This approach caused a problem though: it meant that a react-devtools-inline
+    // instance could steal (and prevent/block) keyboard events from other JavaScript
+    // on the page– which could even include other react-devtools-inline instances.
+    // This is a potential major UX negative.
+    //
+    // Given the above trade offs, we now listen on the root of the Tree itself.
+    const container = treeRef.current;
+    container.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      ownerDocument.removeEventListener('keydown', handleKeyDown);
+      container.removeEventListener('keydown', handleKeyDown);
     };
   }, [dispatch, selectedElementID, store]);
 
@@ -327,6 +340,26 @@ export default function Tree(props: Props) {
   );
   const {errors, warnings} = useSubscription(errorsOrWarningsSubscription);
 
+  const clearErrorsAndWarnings = () => {
+    clearErrorsAndWarningsAPI({bridge, store});
+  };
+
+  const zeroElementsNotice = (
+    <div className={styles.ZeroElementsNotice}>
+      <p>Loading React Element Tree...</p>
+      <p>
+        If this seems stuck, please follow the{' '}
+        <a
+          className={styles.Link}
+          href="https://github.com/facebook/react/tree/main/packages/react-devtools#the-issue-with-chrome-v101-and-earlier-versions"
+          target="_blank">
+          troubleshooting instructions
+        </a>
+        .
+      </p>
+    </div>
+  );
+
   return (
     <TreeFocusedContext.Provider value={treeFocused}>
       <div className={styles.Tree} ref={treeRef}>
@@ -338,13 +371,13 @@ export default function Tree(props: Props) {
             </Fragment>
           )}
           <Suspense fallback={<Loading />}>
-            {ownerID !== null ? <OwnersStack /> : <SearchInput />}
+            {ownerID !== null ? <OwnersStack /> : <ComponentSearchInput />}
           </Suspense>
-          <div className={styles.VRule} />
           {showInlineWarningsAndErrors &&
             ownerID === null &&
             (errors > 0 || warnings > 0) && (
               <React.Fragment>
+                <div className={styles.VRule} />
                 {errors > 0 && (
                   <div className={styles.IconAndCount}>
                     <Icon className={styles.ErrorIcon} type="error" />
@@ -368,42 +401,49 @@ export default function Tree(props: Props) {
                   <ButtonIcon type="down" />
                 </Button>
                 <Button
-                  onClick={() => store.clearErrorsAndWarnings()}
+                  onClick={clearErrorsAndWarnings}
                   title="Clear all errors and warnings">
                   <ButtonIcon type="clear" />
                 </Button>
-                <div className={styles.VRule} />
               </React.Fragment>
             )}
-          <SettingsModalContextToggle />
+          {!hideSettings && (
+            <Fragment>
+              <div className={styles.VRule} />
+              <SettingsModalContextToggle />
+            </Fragment>
+          )}
         </div>
-        <div
-          className={styles.AutoSizerWrapper}
-          onBlur={handleBlur}
-          onFocus={handleFocus}
-          onKeyPress={handleKeyPress}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          ref={focusTargetRef}
-          tabIndex={0}>
-          <AutoSizer>
-            {({height, width}) => (
-              // $FlowFixMe https://github.com/facebook/flow/issues/7341
-              <FixedSizeList
-                className={styles.List}
-                height={height}
-                innerElementType={InnerElementType}
-                itemCount={numElements}
-                itemData={itemData}
-                itemKey={itemKey}
-                itemSize={lineHeight}
-                ref={listCallbackRef}
-                width={width}>
-                {Element}
-              </FixedSizeList>
-            )}
-          </AutoSizer>
-        </div>
+        {numElements === 0 ? (
+          zeroElementsNotice
+        ) : (
+          <div
+            className={styles.AutoSizerWrapper}
+            onBlur={handleBlur}
+            onFocus={handleFocus}
+            onKeyPress={handleKeyPress}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+            ref={focusTargetRef}
+            tabIndex={0}>
+            <AutoSizer>
+              {({height, width}) => (
+                <FixedSizeList
+                  className={styles.List}
+                  height={height}
+                  innerElementType={InnerElementType}
+                  itemCount={numElements}
+                  itemData={itemData}
+                  itemKey={itemKey}
+                  itemSize={lineHeight}
+                  ref={listCallbackRef}
+                  width={width}>
+                  {Element}
+                </FixedSizeList>
+              )}
+            </AutoSizer>
+          </div>
+        )}
       </div>
     </TreeFocusedContext.Provider>
   );
@@ -452,8 +492,8 @@ export default function Tree(props: Props) {
 function updateIndentationSizeVar(
   innerDiv: HTMLDivElement,
   cachedChildWidths: WeakMap<HTMLElement, number>,
-  indentationSizeRef: {|current: number|},
-  prevListWidthRef: {|current: number|},
+  indentationSizeRef: {current: number},
+  prevListWidthRef: {current: number},
 ): void {
   const list = ((innerDiv.parentElement: any): HTMLDivElement);
   const listWidth = list.clientWidth;

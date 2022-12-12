@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -103,7 +103,15 @@ describe('ReactDOMServerIntegration', () => {
     });
 
     itRenders('an empty fragment', async render => {
-      expect(await render(<React.Fragment />)).toBe(null);
+      expect(
+        (
+          await render(
+            <div>
+              <React.Fragment />
+            </div>,
+          )
+        ).firstChild,
+      ).toBe(null);
     });
   });
 });

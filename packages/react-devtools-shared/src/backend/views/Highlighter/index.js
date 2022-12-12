@@ -15,7 +15,7 @@ import {hideOverlay, showOverlay} from './Highlighter';
 import type {BackendBridge} from 'react-devtools-shared/src/bridge';
 
 // This plug-in provides in-page highlighting of the selected element.
-// It is used by the browser extension nad the standalone DevTools shell (when connected to a browser).
+// It is used by the browser extension and the standalone DevTools shell (when connected to a browser).
 // It is not currently the mechanism used to highlight React Native views.
 // That is done by the React Native Inspector component.
 
@@ -50,6 +50,8 @@ export default function setupHighlighter(
       window.addEventListener('pointerdown', onPointerDown, true);
       window.addEventListener('pointerover', onPointerOver, true);
       window.addEventListener('pointerup', onPointerUp, true);
+    } else {
+      agent.emit('startInspectingNative');
     }
   }
 
@@ -76,11 +78,13 @@ export default function setupHighlighter(
       window.removeEventListener('pointerdown', onPointerDown, true);
       window.removeEventListener('pointerover', onPointerOver, true);
       window.removeEventListener('pointerup', onPointerUp, true);
+    } else {
+      agent.emit('stopInspectingNative');
     }
   }
 
   function clearNativeElementHighlight() {
-    hideOverlay();
+    hideOverlay(agent);
   }
 
   function highlightNativeElement({
@@ -113,21 +117,21 @@ export default function setupHighlighter(
 
     if (nodes != null && nodes[0] != null) {
       const node = nodes[0];
+      // $FlowFixMe[method-unbinding]
       if (scrollIntoView && typeof node.scrollIntoView === 'function') {
         // If the node isn't visible show it before highlighting it.
         // We may want to reconsider this; it might be a little disruptive.
-        // $FlowFixMe Flow only knows about 'start' | 'end'
         node.scrollIntoView({block: 'nearest', inline: 'nearest'});
       }
 
-      showOverlay(nodes, displayName, hideAfterTimeout);
+      showOverlay(nodes, displayName, agent, hideAfterTimeout);
 
       if (openNativeElementsPanel) {
         window.__REACT_DEVTOOLS_GLOBAL_HOOK__.$0 = node;
         bridge.send('syncSelectionToNativeElementsPanel');
       }
     } else {
-      hideOverlay();
+      hideOverlay(agent);
     }
   }
 
@@ -181,7 +185,7 @@ export default function setupHighlighter(
       // Don't pass the name explicitly.
       // It will be inferred from DOM tag and Fiber owner.
       if(!window.__HIGHLIGHTING_GLOBAL_SETTINGS__.clickHighlightingMode){
-        showOverlay([target], null, false);
+        showOverlay([target], null, agent, false);
       }
 
       selectFiberForNode(target);

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -13,7 +13,10 @@ import type {Element} from './views/Components/types';
 import type {StateContext} from './views/Components/TreeContext';
 import type Store from './store';
 
-export function printElement(element: Element, includeWeight: boolean = false) {
+export function printElement(
+  element: Element,
+  includeWeight: boolean = false,
+): string {
   let prefix = ' ';
   if (element.children.length > 0) {
     prefix = element.isCollapsed ? '▸' : '▾';
@@ -44,7 +47,7 @@ export function printElement(element: Element, includeWeight: boolean = false) {
 export function printOwnersList(
   elements: Array<Element>,
   includeWeight: boolean = false,
-) {
+): string {
   return elements
     .map(element => printElement(element, includeWeight))
     .join('\n');
@@ -54,7 +57,7 @@ export function printStore(
   store: Store,
   includeWeight: boolean = false,
   state: StateContext | null = null,
-) {
+): string {
   const snapshotLines = [];
 
   let rootWeight = 0;
@@ -114,7 +117,7 @@ export function printStore(
         const element = store.getElementAtIndex(i);
 
         if (element == null) {
-          throw Error(`Could not find element at index ${i}`);
+          throw Error(`Could not find element at index "${i}"`);
         }
 
         const printedSelectedMarker = printSelectedMarker(i);
@@ -131,7 +134,7 @@ export function printStore(
     // Make sure the pretty-printed test align with the Store's reported number of total rows.
     if (rootWeight !== store.numElements) {
       throw Error(
-        `Inconsistent Store state. Individual root weights (${rootWeight}) do not match total weight (${store.numElements})`,
+        `Inconsistent Store state. Individual root weights ("${rootWeight}") do not match total weight ("${store.numElements}")`,
       );
     }
 
@@ -146,7 +149,7 @@ export function printStore(
 // We use JSON.parse to parse string values
 // e.g. 'foo' is not valid JSON but it is a valid string
 // so this method replaces e.g. 'foo' with "foo"
-export function sanitizeForParse(value: any) {
+export function sanitizeForParse(value: any): any | string {
   if (typeof value === 'string') {
     if (
       value.length >= 2 &&
@@ -159,7 +162,7 @@ export function sanitizeForParse(value: any) {
   return value;
 }
 
-export function smartParse(value: any) {
+export function smartParse(value: any): any | void | number {
   switch (value) {
     case 'Infinity':
       return Infinity;
@@ -172,7 +175,7 @@ export function smartParse(value: any) {
   }
 }
 
-export function smartStringify(value: any) {
+export function smartStringify(value: any): string {
   if (typeof value === 'number') {
     if (Number.isNaN(value)) {
       return 'NaN';
@@ -184,4 +187,29 @@ export function smartStringify(value: any) {
   }
 
   return JSON.stringify(value);
+}
+
+// [url, row, column]
+export type Stack = [string, number, number];
+
+const STACK_DELIMETER = /\n\s+at /;
+const STACK_SOURCE_LOCATION = /([^\s]+) \((.+):(.+):(.+)\)/;
+
+export function stackToComponentSources(
+  stack: string,
+): Array<[string, ?Stack]> {
+  const out = [];
+  stack
+    .split(STACK_DELIMETER)
+    .slice(1)
+    .forEach(entry => {
+      const match = STACK_SOURCE_LOCATION.exec(entry);
+      if (match) {
+        const [, component, url, row, column] = match;
+        out.push([component, [url, parseInt(row, 10), parseInt(column, 10)]]);
+      } else {
+        out.push([entry, null]);
+      }
+    });
+  return out;
 }

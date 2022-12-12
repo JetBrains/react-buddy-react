@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -13,22 +13,24 @@ import * as React from 'react';
 
 import {createLRU} from './LRU';
 
-type Suspender = {then(resolve: () => mixed, reject: () => mixed): mixed, ...};
+interface Suspender {
+  then(resolve: () => mixed, reject: () => mixed): mixed;
+}
 
-type PendingResult = {|
+type PendingResult = {
   status: 0,
   value: Suspender,
-|};
+};
 
-type ResolvedResult<V> = {|
+type ResolvedResult<V> = {
   status: 1,
   value: V,
-|};
+};
 
-type RejectedResult = {|
+type RejectedResult = {
   status: 2,
   value: mixed,
-|};
+};
 
 type Result<V> = PendingResult | ResolvedResult<V> | RejectedResult;
 
@@ -46,16 +48,18 @@ const ReactCurrentDispatcher =
   React.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED
     .ReactCurrentDispatcher;
 
-function readContext(Context, observedBits) {
+function readContext(Context) {
   const dispatcher = ReactCurrentDispatcher.current;
   if (dispatcher === null) {
+    // This wasn't being minified but we're going to retire this package anyway.
+    // eslint-disable-next-line react-internal/prod-error-codes
     throw new Error(
       'react-cache: read and preload may only be called from within a ' +
         "component's render. They are not supported in event handlers or " +
         'lifecycle methods.',
     );
   }
-  return dispatcher.readContext(Context, observedBits);
+  return dispatcher.readContext(Context);
 }
 
 function identityHashFn(input) {
@@ -120,6 +124,7 @@ function accessResult<I, K, V>(
       status: Pending,
       value: thenable,
     };
+    // $FlowFixMe[escaped-generic] discovered when updating Flow
     const newEntry = lru.add(newResult, deleteEntry.bind(null, resource, key));
     entriesForResource.set(key, newEntry);
     return newResult;

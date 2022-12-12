@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -136,7 +136,7 @@ describe('ReactFunctionComponent', () => {
     );
   });
 
-  it('should throw when stateless component returns undefined', () => {
+  it('should not throw when stateless component returns undefined', () => {
     function NotAComponent() {}
     expect(function() {
       ReactTestUtils.renderIntoDocument(
@@ -144,10 +144,7 @@ describe('ReactFunctionComponent', () => {
           <NotAComponent />
         </div>,
       );
-    }).toThrowError(
-      'NotAComponent(...): Nothing was returned from render. ' +
-        'This usually means a return statement is missing. Or, to render nothing, return null.',
-    );
+    }).not.toThrowError();
   });
 
   it('should throw on string refs in pure functions', () => {
@@ -284,10 +281,8 @@ describe('ReactFunctionComponent', () => {
     }).toErrorDev('Warning: Function components cannot be given refs.');
     // Should be deduped (same internal instance, no additional warnings)
     instance2.forceUpdate();
-    // Could not be deduped (different internal instance):
-    expect(() =>
-      ReactTestUtils.renderIntoDocument(<AnonymousParentNotUsingJSX />),
-    ).toErrorDev('Warning: Function components cannot be given refs.');
+    // Could not be differentiated (since owner is anonymous and no source location)
+    ReactTestUtils.renderIntoDocument(<AnonymousParentNotUsingJSX />);
 
     // When owner doesn't use JSX, but is named, we warn once per owner name
     class NamedParentNotUsingJSX extends React.Component {
@@ -372,11 +367,12 @@ describe('ReactFunctionComponent', () => {
     Child.defaultProps = {test: 2};
     Child.propTypes = {test: PropTypes.string};
 
-    expect(() => ReactTestUtils.renderIntoDocument(<Child />)).toErrorDev(
+    expect(() => ReactTestUtils.renderIntoDocument(<Child />)).toErrorDev([
+      'Warning: Child: Support for defaultProps will be removed from function components in a future major release. Use JavaScript default parameters instead.',
       'Warning: Failed prop type: Invalid prop `test` of type `number` ' +
         'supplied to `Child`, expected `string`.\n' +
         '    in Child (at **)',
-    );
+    ]);
   });
 
   it('should receive context', () => {

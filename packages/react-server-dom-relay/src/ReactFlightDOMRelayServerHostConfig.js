@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,7 +11,11 @@ import type {RowEncoding, JSONValue} from './ReactFlightDOMRelayProtocol';
 
 import type {Request, ReactModel} from 'react-server/src/ReactFlightServer';
 
-import JSResourceReference from 'JSResourceReference';
+import type {JSResourceReference} from 'JSResourceReference';
+import JSResourceReferenceImpl from 'JSResourceReferenceImpl';
+
+import hasOwnProperty from 'shared/hasOwnProperty';
+import isArray from 'shared/isArray';
 
 export type ModuleReference<T> = JSResourceReference<T>;
 
@@ -26,6 +30,7 @@ import {resolveModelToJSON} from 'react-server/src/ReactFlightServer';
 import {
   emitRow,
   resolveModuleMetaData as resolveModuleMetaDataImpl,
+  close,
 } from 'ReactFlightDOMRelayServerIntegration';
 
 export type {
@@ -35,7 +40,7 @@ export type {
 } from 'ReactFlightDOMRelayServerIntegration';
 
 export function isModuleReference(reference: Object): boolean {
-  return reference instanceof JSResourceReference;
+  return reference instanceof JSResourceReferenceImpl;
 }
 
 export type ModuleKey = ModuleReference<any>;
@@ -55,23 +60,53 @@ export function resolveModuleMetaData<T>(
 
 export type Chunk = RowEncoding;
 
-export function processErrorChunk(
+export function processErrorChunkProd(
   request: Request,
   id: number,
-  message: string,
-  stack: string,
+  digest: string,
 ): Chunk {
+  if (__DEV__) {
+    // These errors should never make it into a build so we don't need to encode them in codes.json
+    // eslint-disable-next-line react-internal/prod-error-codes
+    throw new Error(
+      'processErrorChunkProd should never be called while in development mode. Use processErrorChunkDev instead. This is a bug in React.',
+    );
+  }
+
   return [
     'E',
     id,
     {
+      digest,
+    },
+  ];
+}
+
+export function processErrorChunkDev(
+  request: Request,
+  id: number,
+  digest: string,
+  message: string,
+  stack: string,
+): Chunk {
+  if (!__DEV__) {
+    // These errors should never make it into a build so we don't need to encode them in codes.json
+    // eslint-disable-next-line react-internal/prod-error-codes
+    throw new Error(
+      'processErrorChunkDev should never be called while in production mode. Use processErrorChunkProd instead. This is a bug in React.',
+    );
+  }
+
+  return [
+    'E',
+    id,
+    {
+      digest,
       message,
       stack,
     },
   ];
 }
-
-const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 function convertModelToJSON(
   request: Request,
@@ -81,13 +116,15 @@ function convertModelToJSON(
 ): JSONValue {
   const json = resolveModelToJSON(request, parent, key, model);
   if (typeof json === 'object' && json !== null) {
-    if (Array.isArray(json)) {
+    if (isArray(json)) {
       const jsonArray: Array<JSONValue> = [];
       for (let i = 0; i < json.length; i++) {
         jsonArray[i] = convertModelToJSON(request, json, '' + i, json[i]);
       }
       return jsonArray;
     } else {
+      /* $FlowFixMe the old version of Flow doesn't have a good way to define
+       * an empty exact object. */
       const jsonObj: {[key: string]: JSONValue} = {};
       for (const nextKey in json) {
         if (hasOwnProperty.call(json, nextKey)) {
@@ -110,8 +147,17 @@ export function processModelChunk(
   id: number,
   model: ReactModel,
 ): Chunk {
+  // $FlowFixMe no good way to define an empty exact object
   const json = convertModelToJSON(request, {}, '', model);
   return ['J', id, json];
+}
+
+export function processReferenceChunk(
+  request: Request,
+  id: number,
+  reference: string,
+): Chunk {
+  return ['J', id, reference];
 }
 
 export function processModuleChunk(
@@ -121,6 +167,14 @@ export function processModuleChunk(
 ): Chunk {
   // The moduleMetaData is already a JSON serializable value.
   return ['M', id, moduleMetaData];
+}
+
+export function processProviderChunk(
+  request: Request,
+  id: number,
+  contextName: string,
+): Chunk {
+  return ['P', id, contextName];
 }
 
 export function processSymbolChunk(
@@ -137,13 +191,31 @@ export function scheduleWork(callback: () => void) {
 
 export function flushBuffered(destination: Destination) {}
 
+export const supportsRequestStorage = false;
+export const requestStorage: AsyncLocalStorage<
+  Map<Function, mixed>,
+> = (null: any);
+
 export function beginWriting(destination: Destination) {}
 
-export function writeChunk(destination: Destination, chunk: Chunk): boolean {
+export function writeChunk(destination: Destination, chunk: Chunk): void {
+  // $FlowFixMe `Chunk` doesn't flow into `JSONValue` because of the `E` row type.
+  emitRow(destination, chunk);
+}
+
+export function writeChunkAndReturn(
+  destination: Destination,
+  chunk: Chunk,
+): boolean {
+  // $FlowFixMe `Chunk` doesn't flow into `JSONValue` because of the `E` row type.
   emitRow(destination, chunk);
   return true;
 }
 
 export function completeWriting(destination: Destination) {}
 
-export {close} from 'ReactFlightDOMRelayServerIntegration';
+export {close};
+
+export function closeWithError(destination: Destination, error: mixed): void {
+  close(destination);
+}
