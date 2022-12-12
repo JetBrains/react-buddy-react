@@ -21,6 +21,12 @@ import type {BackendBridge} from 'react-devtools-shared/src/bridge';
 
 let iframesListeningTo: Set<HTMLIFrameElement> = new Set();
 
+let requestCounter = 0;
+function getRequestId() {
+  requestCounter++;
+  return requestCounter;
+}
+
 export default function setupHighlighter(
   bridge: BackendBridge,
   agent: Agent,
@@ -227,13 +233,13 @@ export default function setupHighlighter(
       console.warn(`Invalid renderer id "${rendererID}" for element "${id}"`);
       return
     }
-    const inspectedElement = renderer.inspectElement(id, undefined);
+    const inspectedElement = renderer.inspectElement(getRequestId(), id, null, true);
     if (!inspectedElement) return null;
     const elInfo = inspectedElement.value;
-    if(!elInfo) return null;
+    if (!elInfo) return null;
     if (elInfo.source) return inspectedElement;
     for (let i = 0; i < elInfo.owners.length; i++) {
-      const ownerEl = renderer.inspectElement(elInfo.owners[i].id);
+      const ownerEl = renderer.inspectElement(getRequestId(), elInfo.owners[i].id, null, true);
       if (ownerEl?.value?.source) {
         return ownerEl
       }

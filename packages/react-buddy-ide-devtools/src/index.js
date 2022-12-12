@@ -7,10 +7,10 @@ import Bridge, {BackendBridge} from 'react-devtools-shared/src/bridge';
 import {installHook} from 'react-devtools-shared/src/hook';
 import {initBackend} from 'react-devtools-shared/src/backend';
 import {
-    updateBridge, 
-    savedPreferencesString, 
-    installHighlighter, 
-    initComponentFilters, 
+    updateBridge,
+    savedPreferencesString,
+    installHighlighter,
+    initComponentFilters,
     initHighlightngGlobalSettings,
     installHighlightingModeChangingApi,
     installHighlightingClickHandler,
@@ -24,7 +24,7 @@ savedPreferencesString();
 installHook(window);
 initComponentFilters(window);
 
-const hook: ?DevToolsHook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;  
+const hook: ?DevToolsHook = window.__REACT_DEVTOOLS_GLOBAL_HOOK__;
 const bridge: BackendBridge = new Bridge({
     listen() {},
     send(event: string, payload: any) {
@@ -37,7 +37,7 @@ updateBridge(bridge, agent);
 initBackend(hook, agent, window);
 
 initHighlightngGlobalSettings(window);
-installComponentsPropertiesEditorApi(window);
-installHighlightingModeChangingApi(window);
+installComponentsPropertiesEditorApi(window, agent);
+installHighlightingModeChangingApi(window, agent);
 installHighlightingClickHandler(window, agent);
 installHighlighter(agent, bridge, window);

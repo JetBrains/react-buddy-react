@@ -41,7 +41,7 @@ module.exports = {
     alias: {
       react: resolve(builtModulesDir, 'react'),
       'react-debug-tools': resolve(builtModulesDir, 'react-debug-tools'),
-      'react-devtools-feature-flags': resolveFeatureFlags('core/backend'),
+      'react-devtools-feature-flags': resolveFeatureFlags('core/backend-oss'),
       'react-dom': resolve(builtModulesDir, 'react-dom'),
       'react-is': resolve(builtModulesDir, 'react-is'),
       scheduler: resolve(builtModulesDir, 'scheduler'),

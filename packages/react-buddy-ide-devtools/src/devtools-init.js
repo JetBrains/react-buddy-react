@@ -12,6 +12,12 @@ import {getDefaultComponentFilters} from 'react-devtools-shared/src/utils';
 import {debounceWrapper} from "./devtools-init.utils";
 import {hideOverlay, showOverlay} from "../../react-devtools-shared/src/backend/views/Highlighter/Highlighter"
 
+let requestCounter = 0;
+function getRequestId() {
+  requestCounter++;
+  return requestCounter;
+}
+
 export function initComponentFilters(target) {
     target.__REACT_DEVTOOLS_COMPONENT_FILTERS__ = [
         {
@@ -30,7 +36,7 @@ export function savedPreferencesString() {
 }
 
 export function sendSuccessInitMessage() {
-    if(typeof window.cefQuery === "function") {
+    if (typeof window.cefQuery === "function") {
         window.cefQuery({request: "event:react-toolbox-initialized"});
     }
 }
@@ -52,7 +58,7 @@ export function updateBridge(bridge, agent) {
             }
         },
     );
-    
+
     bridge.addListener(
         'updateComponentFilters',
         (componentFilters: Array<ComponentFilter>) => {
@@ -62,7 +68,7 @@ export function updateBridge(bridge, agent) {
             savedComponentFilters = componentFilters;
         },
     );
-    
+
     if (window.__REACT_DEVTOOLS_COMPONENT_FILTERS__ == null) {
         bridge.send('overrideComponentFilters', savedComponentFilters);
     }
@@ -92,32 +98,32 @@ export function initHighlightngGlobalSettings(target) {
     }
 }
 
-export function installHighlightingModeChangingApi(target) {
+export function installHighlightingModeChangingApi(target, agent) {
     target.setClickingHighlightingMode = function () {
         target.__HIGHLIGHTING_GLOBAL_SETTINGS__ = {
             enabled: true,
             hoverHighlightingMode: false,
-            clickHighlightingMode: true 
+            clickHighlightingMode: true
         }
-        hideOverlay();
+        hideOverlay(agent);
     }
 
     target.setHoverHighlightingMode = function () {
         target.__HIGHLIGHTING_GLOBAL_SETTINGS__ = {
             enabled: true,
             hoverHighlightingMode: true,
-            clickHighlightingMode: false 
+            clickHighlightingMode: false
         }
-        hideOverlay();
+        hideOverlay(agent);
     }
 
     target.disableHighlighting = function () {
         target.__HIGHLIGHTING_GLOBAL_SETTINGS__ = {
             enabled: false,
             hoverHighlightingMode: false,
-            clickHighlightingMode: false 
+            clickHighlightingMode: false
         }
-        hideOverlay();
+        hideOverlay(agent);
     }
 }
 
@@ -129,25 +135,25 @@ export function installHighlightingClickHandler(target, agent) {
           console.warn(`Invalid renderer id "${rendererID}" for element "${id}"`);
           return
         }
-        const inspectedElement = renderer.inspectElement(id, undefined);
+        const inspectedElement = renderer.inspectElement(getRequestId(), id, null, true);
         if (!inspectedElement) return null;
         const elInfo = inspectedElement.value;
-        if(!elInfo) return null;
+        if (!elInfo) return null;
         if (elInfo.source) return inspectedElement;
         for (let i = 0; i < elInfo.owners.length; i++) {
-          const ownerEl = renderer.inspectElement(elInfo.owners[i].id);
+          const ownerEl = renderer.inspectElement(getRequestId(), elInfo.owners[i].id, null, true);
           if (ownerEl?.value?.source) {
             return ownerEl
           }
         }
       }
-    
+
       const setHighlight = throttle(
         memoize((node: HTMLElement) => {
           const {id = null, rendererID} = {...agent.getIDForNode(node)};
           if (id !== null) {
             if (typeof target.cefQuery === 'function') {
-              showOverlay([node], null, false);
+              showOverlay([node], null, agent, false);
               const elementWithSource = traverseToElementWithSource(id, rendererID);
               if (elementWithSource == null) {
                 return
@@ -173,12 +179,12 @@ export function installHighlightingClickHandler(target, agent) {
     }, true);
 }
 
-export function installComponentsPropertiesEditorApi(target) {
+export function installComponentsPropertiesEditorApi(target, agent) {
     target.__PROPERTIES_EDIT_PANEL_ENABLED__ = false;
 
     target.setPropertiesEditPanelStatus = function(status) {
         target.__PROPERTIES_EDIT_PANEL_ENABLED__ = status;
-        hideOverlay();
+        hideOverlay(agent);
     }
 
     target.isHighlightingEnabled = function() {

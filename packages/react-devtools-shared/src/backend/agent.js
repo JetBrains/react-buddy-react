@@ -326,7 +326,7 @@ export default class Agent extends EventEmitter<{
     return renderer.getInstanceAndStyle(id);
   }
 
-  getBestMatchingRendererInterface(node: Object): RendererInterface | null {
+  getBestMatchingRendererInterface(node: Object): {rendererID: number, rendererInterface: RendererInterface} | null {
     let bestMatch = null;
     for (const rendererID in this._rendererInterfaces) {
       const renderer = ((this._rendererInterfaces[
@@ -347,8 +347,9 @@ export default class Agent extends EventEmitter<{
   }
 
   getIDForNode(node: Object): Object | null {
-    const {rendererID, rendererInterface} = this.getBestMatchingRendererInterface(node);
-    if (rendererInterface != null) {
+    const rendererInterfaceInfo = this.getBestMatchingRendererInterface(node)
+    if (rendererInterfaceInfo != null) {
+      const {rendererID, rendererInterface} = rendererInterfaceInfo;
       try {
         const id = rendererInterface.getFiberIDForNative(node, true);
         if (id !== null) {
