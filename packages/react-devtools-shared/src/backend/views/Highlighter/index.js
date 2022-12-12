@@ -215,7 +215,6 @@ export default function setupHighlighter(
           if (elementWithSource == null) {
             return
           }
-          console.log(elementWithSource.value.displayName, elementWithSource.value)
           window.cefQuery({request: elementWithSource.value.source.fileName +
               ':' + elementWithSource.value.source.lineNumber+':'+elementWithSource.value.source.columnNumber});
         }

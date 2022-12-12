@@ -158,7 +158,6 @@ export function installHighlightingClickHandler(target, agent) {
               if (elementWithSource == null) {
                 return
               }
-              console.log(elementWithSource.value.displayName, elementWithSource.value)
               target.cefQuery({request: elementWithSource.value.source.fileName +
                   ':' + elementWithSource.value.source.lineNumber+':'+elementWithSource.value.source.columnNumber});
             }
