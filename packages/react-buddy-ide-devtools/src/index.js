@@ -15,6 +15,7 @@ import {
     installHighlightingModeChangingApi,
     installHighlightingClickHandler,
     installComponentsPropertiesEditorApi,
+    installTraceUpdatesApi,
     sendSuccessInitMessage
 } from './devtools-init';
 
@@ -41,3 +42,4 @@ installComponentsPropertiesEditorApi(window, agent);
 installHighlightingModeChangingApi(window, agent);
 installHighlightingClickHandler(window, agent);
 installHighlighter(agent, bridge, window);
+installTraceUpdatesApi(window, agent);

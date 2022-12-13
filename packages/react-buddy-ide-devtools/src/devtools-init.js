@@ -190,3 +190,9 @@ export function installComponentsPropertiesEditorApi(target, agent) {
         return (target.__HIGHLIGHTING_GLOBAL_SETTINGS__.enabled && !target.__PROPERTIES_EDIT_PANEL_ENABLED__)
     }
 }
+
+export function installTraceUpdatesApi(target, agent) {
+  target.setReactTraceUpdatesEnabled = function(enabled) {
+    agent.setTraceUpdatesEnabled(enabled);
+  }
+}
