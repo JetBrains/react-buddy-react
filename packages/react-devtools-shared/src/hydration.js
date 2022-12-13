@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -19,18 +19,18 @@ import {
 import type {DehydratedData} from 'react-devtools-shared/src/devtools/views/Components/types';
 
 export const meta = {
-  inspectable: Symbol('inspectable'),
-  inspected: Symbol('inspected'),
-  name: Symbol('name'),
-  preview_long: Symbol('preview_long'),
-  preview_short: Symbol('preview_short'),
-  readonly: Symbol('readonly'),
-  size: Symbol('size'),
-  type: Symbol('type'),
-  unserializable: Symbol('unserializable'),
+  inspectable: (Symbol('inspectable'): symbol),
+  inspected: (Symbol('inspected'): symbol),
+  name: (Symbol('name'): symbol),
+  preview_long: (Symbol('preview_long'): symbol),
+  preview_short: (Symbol('preview_short'): symbol),
+  readonly: (Symbol('readonly'): symbol),
+  size: (Symbol('size'): symbol),
+  type: (Symbol('type'): symbol),
+  unserializable: (Symbol('unserializable'): symbol),
 };
 
-export type Dehydrated = {|
+export type Dehydrated = {
   inspectable: boolean,
   name: string | null,
   preview_long: string | null,
@@ -38,7 +38,7 @@ export type Dehydrated = {|
   readonly?: boolean,
   size?: number,
   type: string,
-|};
+};
 
 // Typed arrays and other complex iteratable objects (e.g. Map, Set, ImmutableJS) need special handling.
 // These objects can't be serialized without losing type information,
@@ -160,7 +160,12 @@ export function dehydrate(
       };
 
     case 'string':
-      return data.length <= 500 ? data : data.slice(0, 500) + '...';
+      isPathAllowedCheck = isPathAllowed(path);
+      if (isPathAllowedCheck) {
+        return data;
+      } else {
+        return data.length <= 500 ? data : data.slice(0, 500) + '...';
+      }
 
     case 'bigint':
       cleaned.push(path);
@@ -243,23 +248,21 @@ export function dehydrate(
               : data.constructor.name,
         };
 
-        if (typeof data[Symbol.iterator]) {
-          // TRICKY
-          // Don't use [...spread] syntax for this purpose.
-          // This project uses @babel/plugin-transform-spread in "loose" mode which only works with Array values.
-          // Other types (e.g. typed arrays, Sets) will not spread correctly.
-          Array.from(data).forEach(
-            (item, i) =>
-              (unserializableValue[i] = dehydrate(
-                item,
-                cleaned,
-                unserializable,
-                path.concat([i]),
-                isPathAllowed,
-                isPathAllowedCheck ? 1 : level + 1,
-              )),
-          );
-        }
+        // TRICKY
+        // Don't use [...spread] syntax for this purpose.
+        // This project uses @babel/plugin-transform-spread in "loose" mode which only works with Array values.
+        // Other types (e.g. typed arrays, Sets) will not spread correctly.
+        Array.from(data).forEach(
+          (item, i) =>
+            (unserializableValue[i] = dehydrate(
+              item,
+              cleaned,
+              unserializable,
+              path.concat([i]),
+              isPathAllowed,
+              isPathAllowedCheck ? 1 : level + 1,
+            )),
+        );
 
         unserializable.push(path);
 
@@ -383,7 +386,9 @@ export function hydrate(
 
     const value = parent[last];
 
-    if (value.type === 'infinity') {
+    if (!value) {
+      return;
+    } else if (value.type === 'infinity') {
       parent[last] = Infinity;
     } else if (value.type === 'nan') {
       parent[last] = NaN;
@@ -391,7 +396,7 @@ export function hydrate(
       parent[last] = undefined;
     } else {
       // Replace the string keys with Symbols so they're non-enumerable.
-      const replaced: {[key: Symbol]: boolean | string, ...} = {};
+      const replaced: {[key: symbol]: boolean | string, ...} = {};
       replaced[meta.inspectable] = !!value.inspectable;
       replaced[meta.inspected] = false;
       replaced[meta.name] = value.name;

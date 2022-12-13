@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -12,15 +12,15 @@ import type Store from 'react-devtools-shared/src/devtools/store';
 
 describe('Store component filters', () => {
   let React;
-  let ReactDOM;
-  let TestUtils;
   let Types;
   let bridge: FrontendBridge;
+  let legacyRender;
   let store: Store;
   let utils;
+  let internalAct;
 
   const act = (callback: Function) => {
-    TestUtils.unstable_concurrentAct(() => {
+    internalAct(() => {
       callback();
     });
     jest.runAllTimers(); // Flush Bridge operations
@@ -34,12 +34,14 @@ describe('Store component filters', () => {
     store.recordChangeDescriptions = true;
 
     React = require('react');
-    ReactDOM = require('react-dom');
-    TestUtils = require('react-dom/test-utils');
     Types = require('react-devtools-shared/src/types');
     utils = require('./utils');
+    internalAct = require('jest-react').act;
+
+    legacyRender = utils.legacyRender;
   });
 
+  // @reactVersion >= 16.0
   it('should throw if filters are updated while profiling', () => {
     act(() => store.profilerStore.startProfiling());
     expect(() => (store.componentFilters = [])).toThrow(
@@ -47,8 +49,9 @@ describe('Store component filters', () => {
     );
   });
 
+  // @reactVersion >= 16.0
   it('should support filtering by element type', () => {
-    class ClassComponent extends React.Component<{|children: React$Node|}> {
+    class ClassComponent extends React.Component<{children: React$Node}> {
       render() {
         return <div>{this.props.children}</div>;
       }
@@ -56,7 +59,7 @@ describe('Store component filters', () => {
     const FunctionComponent = () => <div>Hi</div>;
 
     act(() =>
-      ReactDOM.render(
+      legacyRender(
         <ClassComponent>
           <FunctionComponent />
         </ClassComponent>,
@@ -134,10 +137,11 @@ describe('Store component filters', () => {
     `);
   });
 
+  // @reactVersion >= 16.0
   it('should ignore invalid ElementTypeRoot filter', () => {
     const Component = () => <div>Hi</div>;
 
-    act(() => ReactDOM.render(<Component />, document.createElement('div')));
+    act(() => legacyRender(<Component />, document.createElement('div')));
     expect(store).toMatchInlineSnapshot(`
       [root]
         ▾ <Component>
@@ -158,6 +162,7 @@ describe('Store component filters', () => {
     `);
   });
 
+  // @reactVersion >= 16.2
   it('should filter by display name', () => {
     const Text = ({label}) => label;
     const Foo = () => <Text label="foo" />;
@@ -165,7 +170,7 @@ describe('Store component filters', () => {
     const Baz = () => <Text label="baz" />;
 
     act(() =>
-      ReactDOM.render(
+      legacyRender(
         <React.Fragment>
           <Foo />
           <Bar />
@@ -218,10 +223,11 @@ describe('Store component filters', () => {
     `);
   });
 
+  // @reactVersion >= 16.0
   it('should filter by path', () => {
     const Component = () => <div>Hi</div>;
 
-    act(() => ReactDOM.render(<Component />, document.createElement('div')));
+    act(() => legacyRender(<Component />, document.createElement('div')));
     expect(store).toMatchInlineSnapshot(`
       [root]
         ▾ <Component>
@@ -251,6 +257,7 @@ describe('Store component filters', () => {
     `);
   });
 
+  // @reactVersion >= 16.0
   it('should filter HOCs', () => {
     const Component = () => <div>Hi</div>;
     const Foo = () => <Component />;
@@ -258,7 +265,7 @@ describe('Store component filters', () => {
     const Bar = () => <Foo />;
     Bar.displayName = 'Bar(Foo(Component))';
 
-    act(() => ReactDOM.render(<Bar />, document.createElement('div')));
+    act(() => legacyRender(<Bar />, document.createElement('div')));
     expect(store).toMatchInlineSnapshot(`
       [root]
         ▾ <Component> [Bar][Foo]
@@ -284,6 +291,7 @@ describe('Store component filters', () => {
     `);
   });
 
+  // @reactVersion >= 16.0
   it('should not send a bridge update if the set of enabled filters has not changed', () => {
     act(() => (store.componentFilters = [utils.createHOCFilter(true)]));
 
@@ -314,6 +322,7 @@ describe('Store component filters', () => {
     );
   });
 
+  // @reactVersion >= 18.0
   it('should not break when Suspense nodes are filtered from the tree', () => {
     const promise = new Promise(() => {});
 
@@ -337,7 +346,7 @@ describe('Store component filters', () => {
     ];
 
     const container = document.createElement('div');
-    act(() => ReactDOM.render(<Wrapper shouldSuspend={true} />, container));
+    act(() => legacyRender(<Wrapper shouldSuspend={true} />, container));
     expect(store).toMatchInlineSnapshot(`
       [root]
         ▾ <Wrapper>
@@ -345,14 +354,14 @@ describe('Store component filters', () => {
               <div>
     `);
 
-    act(() => ReactDOM.render(<Wrapper shouldSuspend={false} />, container));
+    act(() => legacyRender(<Wrapper shouldSuspend={false} />, container));
     expect(store).toMatchInlineSnapshot(`
       [root]
         ▾ <Wrapper>
             <Component>
     `);
 
-    act(() => ReactDOM.render(<Wrapper shouldSuspend={true} />, container));
+    act(() => legacyRender(<Wrapper shouldSuspend={true} />, container));
     expect(store).toMatchInlineSnapshot(`
       [root]
         ▾ <Wrapper>
@@ -362,6 +371,7 @@ describe('Store component filters', () => {
   });
 
   describe('inline errors and warnings', () => {
+    // @reactVersion >= 17.0
     it('only counts for unfiltered components', () => {
       function ComponentWithWarning() {
         console.warn('test-only: render warning');
@@ -376,6 +386,14 @@ describe('Store component filters', () => {
         console.warn('test-only: render warning');
         return null;
       }
+
+      // HACK This require() is needed (somewhere in the test) for this case to pass.
+      // Without it, the legacyRender() call below causes this test to fail
+      // because it requires "react-dom" for the first time,
+      // which causes the console error() and warn() methods to be overridden again,
+      // effectively disconnecting the DevTools override in 'react-devtools-shared/src/backend/console'.
+      require('react-dom');
+
       const container = document.createElement('div');
       utils.withErrorsOrWarningsIgnored(['test-only:'], () => {
         act(
@@ -386,7 +404,7 @@ describe('Store component filters', () => {
             ]),
         );
         act(() =>
-          ReactDOM.render(
+          legacyRender(
             <React.Fragment>
               <ComponentWithError />
               <ComponentWithWarning />

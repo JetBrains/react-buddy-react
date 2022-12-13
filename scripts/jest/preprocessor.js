@@ -13,9 +13,6 @@ const pathToBabel = path.join(
   '../..',
   'package.json'
 );
-const pathToBabelPluginDevWithCode = require.resolve(
-  '../error-codes/transform-error-messages'
-);
 const pathToBabelPluginReplaceConsoleCalls = require.resolve(
   '../babel/transform-replace-console-calls'
 );
@@ -28,6 +25,9 @@ const pathToTransformInfiniteLoops = require.resolve(
 const pathToTransformTestGatePragma = require.resolve(
   '../babel/transform-test-gate-pragma'
 );
+const pathToTransformReactVersionPragma = require.resolve(
+  '../babel/transform-react-version-pragma'
+);
 const pathToBabelrc = path.join(__dirname, '..', '..', 'babel.config.js');
 const pathToErrorCodes = require.resolve('../error-codes/codes.json');
 
@@ -35,8 +35,6 @@ const babelOptions = {
   plugins: [
     // For Node environment only. For builds, Rollup takes care of ESM.
     require.resolve('@babel/plugin-transform-modules-commonjs'),
-
-    pathToBabelPluginDevWithCode,
 
     // Keep stacks detailed in tests.
     // Don't put this in .babelrc so that we don't embed filenames
@@ -59,6 +57,10 @@ const babelOptions = {
 
 module.exports = {
   process: function(src, filePath) {
+    if (filePath.match(/\.css$/)) {
+      // Don't try to parse CSS modules; they aren't needed for tests anyway.
+      return '';
+    }
     if (filePath.match(/\.coffee$/)) {
       return coffee.compile(src, {bare: true});
     }
@@ -83,6 +85,14 @@ module.exports = {
       const plugins = (isTestFile ? testOnlyPlugins : sourceOnlyPlugins).concat(
         babelOptions.plugins
       );
+      if (
+        isTestFile &&
+        isInDevToolsPackages &&
+        (process.env.REACT_VERSION ||
+          filePath.match(/\/transform-react-version-pragma-test/))
+      ) {
+        plugins.push(pathToTransformReactVersionPragma);
+      }
       return babel.transform(
         src,
         Object.assign(
@@ -90,6 +100,9 @@ module.exports = {
           babelOptions,
           {
             plugins,
+            sourceMaps: process.env.JEST_ENABLE_SOURCE_MAPS
+              ? process.env.JEST_ENABLE_SOURCE_MAPS
+              : false,
           }
         )
       );
@@ -97,13 +110,19 @@ module.exports = {
     return src;
   },
 
-  getCacheKey: createCacheKeyFunction([
-    __filename,
-    pathToBabel,
-    pathToBabelrc,
-    pathToBabelPluginDevWithCode,
-    pathToTransformInfiniteLoops,
-    pathToTransformTestGatePragma,
-    pathToErrorCodes,
-  ]),
+  getCacheKey: createCacheKeyFunction(
+    [
+      __filename,
+      pathToBabel,
+      pathToBabelrc,
+      pathToTransformInfiniteLoops,
+      pathToTransformTestGatePragma,
+      pathToTransformReactVersionPragma,
+      pathToErrorCodes,
+    ],
+    [
+      (process.env.REACT_VERSION != null).toString(),
+      (process.env.NODE_ENV === 'development').toString(),
+    ]
+  ),
 };

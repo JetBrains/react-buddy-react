@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -405,49 +405,6 @@ describe('ReactDOM', () => {
 
     if (__DEV__) {
       ReactDOM.render(<App />, container);
-    }
-  });
-
-  it('throws in DEV if jsdom is destroyed by the time setState() is called', () => {
-    class App extends React.Component {
-      state = {x: 1};
-      componentDidUpdate() {}
-      render() {
-        return <div />;
-      }
-    }
-    const container = document.createElement('div');
-    const instance = ReactDOM.render(<App />, container);
-    const documentDescriptor = Object.getOwnPropertyDescriptor(
-      global,
-      'document',
-    );
-    try {
-      // Emulate jsdom environment cleanup.
-      // This is roughly what happens if the test finished and then
-      // an asynchronous callback tried to setState() after this.
-      delete global.document;
-
-      // The error we're interested in is thrown by invokeGuardedCallback, which
-      // in DEV is used 1) to replay a failed begin phase, or 2) when calling
-      // lifecycle methods. We're triggering the second case here.
-      const fn = () => instance.setState({x: 2});
-      if (__DEV__) {
-        expect(fn).toThrow(
-          'The `document` global was defined when React was initialized, but is not ' +
-            'defined anymore. This can happen in a test environment if a component ' +
-            'schedules an update from an asynchronous callback, but the test has already ' +
-            'finished running. To solve this, you can either unmount the component at ' +
-            'the end of your test (and ensure that any asynchronous operations get ' +
-            'canceled in `componentWillUnmount`), or you can change the test itself ' +
-            'to be asynchronous.',
-        );
-      } else {
-        expect(fn).not.toThrow();
-      }
-    } finally {
-      // Don't break other tests.
-      Object.defineProperty(global, 'document', documentDescriptor);
     }
   });
 

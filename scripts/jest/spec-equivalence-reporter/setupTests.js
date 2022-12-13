@@ -1,5 +1,5 @@
 /*!
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -46,10 +46,9 @@ global.spyOnProd = function(...args) {
 };
 
 expect.extend({
-  ...require('../matchers/interactionTracingMatchers'),
-  ...require('../matchers/profilerMatchers'),
-  ...require('../matchers/toWarnDev'),
   ...require('../matchers/reactTestMatchers'),
+  ...require('../matchers/toThrow'),
+  ...require('../matchers/toWarnDev'),
 });
 
 beforeEach(() => (numExpectations = 0));

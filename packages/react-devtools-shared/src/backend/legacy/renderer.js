@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -51,7 +51,7 @@ import type {
   ComponentFilter,
   ElementType,
 } from 'react-devtools-shared/src/types';
-import type {Owner, InspectedElement} from '../types';
+import type {InspectedElement, SerializedElement} from '../types';
 
 export type InternalInstance = Object;
 type LegacyRenderer = Object;
@@ -63,7 +63,7 @@ function getData(internalInstance: InternalInstance) {
   // != used deliberately here to catch undefined and null
   if (internalInstance._currentElement != null) {
     if (internalInstance._currentElement.key) {
-      key = '' + internalInstance._currentElement.key;
+      key = String(internalInstance._currentElement.key);
     }
 
     const elementType = internalInstance._currentElement.type;
@@ -148,6 +148,10 @@ export function attach(
 
   let getInternalIDForNative: GetFiberIDForNative = ((null: any): GetFiberIDForNative);
   let findNativeNodeForInternalID: (id: number) => ?NativeType;
+  let getFiberForNative = (node: NativeType) => {
+    // Not implemented.
+    return null;
+  };
 
   if (renderer.ComponentTree) {
     getInternalIDForNative = (node, findNearestUnfilteredAncestor) => {
@@ -159,6 +163,9 @@ export function attach(
     findNativeNodeForInternalID = (id: number) => {
       const internalInstance = idToInternalInstanceMap.get(id);
       return renderer.ComponentTree.getNodeFromInstance(internalInstance);
+    };
+    getFiberForNative = (node: NativeType) => {
+      return renderer.ComponentTree.getClosestInstanceFromNode(node);
     };
   } else if (renderer.Mount.getID && renderer.Mount.getNode) {
     getInternalIDForNative = (node, findNearestUnfilteredAncestor) => {
@@ -211,10 +218,12 @@ export function attach(
         const internalInstance = args[0];
         const hostContainerInfo = args[3];
         if (getElementType(internalInstance) === ElementTypeOtherOrUnknown) {
+          // $FlowFixMe[object-this-reference] found when upgrading Flow
           return fn.apply(this, args);
         }
         if (hostContainerInfo._topLevelWrapper === undefined) {
           // SSR
+          // $FlowFixMe[object-this-reference] found when upgrading Flow
           return fn.apply(this, args);
         }
 
@@ -234,10 +243,12 @@ export function attach(
         );
 
         try {
+          // $FlowFixMe[object-this-reference] found when upgrading Flow
           const result = fn.apply(this, args);
           parentIDStack.pop();
           return result;
         } catch (err) {
+          // $FlowFixMe[incompatible-type] found when upgrading Flow
           parentIDStack = [];
           throw err;
         } finally {
@@ -253,6 +264,7 @@ export function attach(
       performUpdateIfNecessary(fn, args) {
         const internalInstance = args[0];
         if (getElementType(internalInstance) === ElementTypeOtherOrUnknown) {
+          // $FlowFixMe[object-this-reference] found when upgrading Flow
           return fn.apply(this, args);
         }
 
@@ -261,6 +273,7 @@ export function attach(
 
         const prevChildren = getChildren(internalInstance);
         try {
+          // $FlowFixMe[object-this-reference] found when upgrading Flow
           const result = fn.apply(this, args);
 
           const nextChildren = getChildren(internalInstance);
@@ -272,6 +285,7 @@ export function attach(
           parentIDStack.pop();
           return result;
         } catch (err) {
+          // $FlowFixMe[incompatible-type] found when upgrading Flow
           parentIDStack = [];
           throw err;
         } finally {
@@ -287,6 +301,7 @@ export function attach(
       receiveComponent(fn, args) {
         const internalInstance = args[0];
         if (getElementType(internalInstance) === ElementTypeOtherOrUnknown) {
+          // $FlowFixMe[object-this-reference] found when upgrading Flow
           return fn.apply(this, args);
         }
 
@@ -295,6 +310,7 @@ export function attach(
 
         const prevChildren = getChildren(internalInstance);
         try {
+          // $FlowFixMe[object-this-reference] found when upgrading Flow
           const result = fn.apply(this, args);
 
           const nextChildren = getChildren(internalInstance);
@@ -306,6 +322,7 @@ export function attach(
           parentIDStack.pop();
           return result;
         } catch (err) {
+          // $FlowFixMe[incompatible-type] found when upgrading Flow
           parentIDStack = [];
           throw err;
         } finally {
@@ -321,12 +338,14 @@ export function attach(
       unmountComponent(fn, args) {
         const internalInstance = args[0];
         if (getElementType(internalInstance) === ElementTypeOtherOrUnknown) {
+          // $FlowFixMe[object-this-reference] found when upgrading Flow
           return fn.apply(this, args);
         }
 
         const id = getID(internalInstance);
         parentIDStack.push(id);
         try {
+          // $FlowFixMe[object-this-reference] found when upgrading Flow
           const result = fn.apply(this, args);
           parentIDStack.pop();
 
@@ -335,6 +354,7 @@ export function attach(
 
           return result;
         } catch (err) {
+          // $FlowFixMe[incompatible-type] found when upgrading Flow
           parentIDStack = [];
           throw err;
         } finally {
@@ -386,7 +406,9 @@ export function attach(
       pushOperation(TREE_OPERATION_ADD);
       pushOperation(id);
       pushOperation(ElementTypeRoot);
-      pushOperation(0); // isProfilingSupported?
+      pushOperation(0); // StrictMode compliant?
+      pushOperation(0); // Profiling flag
+      pushOperation(0); // StrictMode supported?
       pushOperation(hasOwnerMetadata ? 1 : 0);
     } else {
       const type = getElementType(internalInstance);
@@ -691,10 +713,12 @@ export function attach(
   }
 
   function inspectElement(
+    requestID: number,
     id: number,
-    path?: Array<string | number>,
+    path: Array<string | number> | null,
+    forceFullData: boolean,
   ): InspectedElementPayload {
-    if (currentlyInspectedElementID !== id) {
+    if (forceFullData || currentlyInspectedElementID !== id) {
       currentlyInspectedElementID = id;
       currentlyInspectedPaths = {};
     }
@@ -703,17 +727,18 @@ export function attach(
     if (inspectedElement === null) {
       return {
         id,
+        responseID: requestID,
         type: 'not-found',
       };
     }
 
-    if (path != null) {
+    if (path !== null) {
       mergeInspectedPaths(path);
     }
 
     // Any time an inspected element has an update,
     // we should update the selected $r value as wel.
-    // Do this before dehyration (cleanForBridge).
+    // Do this before dehydration (cleanForBridge).
     updateSelectedElement(id);
 
     inspectedElement.context = cleanForBridge(
@@ -731,6 +756,7 @@ export function attach(
 
     return {
       id,
+      responseID: requestID,
       type: 'full-data',
       value: inspectedElement,
     };
@@ -764,6 +790,7 @@ export function attach(
           owners.push({
             displayName: getData(owner).displayName || 'Unknown',
             id: getID(owner),
+            key: element.key,
             type: getElementType(owner),
           });
           if (owner._currentElement) {
@@ -795,6 +822,11 @@ export function attach(
       canEditHooksAndRenamePaths: false,
       canEditFunctionPropsDeletePaths: false,
       canEditFunctionPropsRenamePaths: false,
+
+      // Toggle error boundary did not exist in legacy versions
+      canToggleError: false,
+      isErrored: false,
+      targetErrorBoundaryID: null,
 
       // Suspense did not exist in legacy versions
       canToggleSuspense: false,
@@ -828,6 +860,10 @@ export function attach(
       rootType: null,
       rendererPackageName: null,
       rendererVersion: null,
+
+      plugins: {
+        stylex: null,
+      },
     };
   }
 
@@ -1009,6 +1045,12 @@ export function attach(
   const handleCommitFiberUnmount = () => {
     throw new Error('handleCommitFiberUnmount not supported by this renderer');
   };
+  const handlePostCommitFiberRoot = () => {
+    throw new Error('handlePostCommitFiberRoot not supported by this renderer');
+  };
+  const overrideError = () => {
+    throw new Error('overrideError not supported by this renderer');
+  };
   const overrideSuspense = () => {
     throw new Error('overrideSuspense not supported by this renderer');
   };
@@ -1041,7 +1083,7 @@ export function attach(
     // Not implemented.
   }
 
-  function getOwnersList(id: number): Array<Owner> | null {
+  function getOwnersList(id: number): Array<SerializedElement> | null {
     // Not implemented.
     return null;
   }
@@ -1058,6 +1100,10 @@ export function attach(
     // Not implemented
   }
 
+  function patchConsoleForStrictMode() {}
+
+  function unpatchConsoleForStrictMode() {}
+
   return {
     clearErrorsAndWarnings,
     clearErrorsForFiberID,
@@ -1068,6 +1114,7 @@ export function attach(
     flushInitialOperations,
     getBestMatchForTrackedPath,
     getDisplayNameForFiberID,
+    getFiberForNative,
     getFiberIDForNative: getInternalIDForNative,
     getInstanceAndStyle,
     findNativeNodesForFiberID: (id: number) => {
@@ -1079,11 +1126,14 @@ export function attach(
     getProfilingData,
     handleCommitFiberRoot,
     handleCommitFiberUnmount,
+    handlePostCommitFiberRoot,
     inspectElement,
     logElementToConsole,
+    overrideError,
     overrideSuspense,
     overrideValueAtPath,
     renamePath,
+    patchConsoleForStrictMode,
     prepareViewAttributeSource,
     prepareViewElementSource,
     renderer,
@@ -1092,6 +1142,7 @@ export function attach(
     startProfiling,
     stopProfiling,
     storeAsGlobal,
+    unpatchConsoleForStrictMode,
     updateComponentFilters,
   };
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,6 +9,7 @@
 
 const {app, BrowserWindow} = require('electron'); // Module to create native browser window.
 const {join} = require('path');
+const os = require('os');
 
 const argv = require('minimist')(process.argv.slice(2));
 const projectRoots = argv._;
@@ -29,11 +30,26 @@ app.on('ready', function() {
     //titleBarStyle: 'customButtonsOnHover',
     webPreferences: {
       nodeIntegration: true,
+      nodeIntegrationInWorker: true,
     },
   });
 
+  // set dock icon for macos
+  if (os.platform() === 'darwin') {
+    app.dock.setIcon(join(__dirname, 'icons/icon128.png'));
+  }
+
+  // https://stackoverflow.com/questions/32402327/
+  // $FlowFixMe[incompatible-use] found when upgrading Flow
+  mainWindow.webContents.on('new-window', function(event, url) {
+    event.preventDefault();
+    require('electron').shell.openExternal(url);
+  });
+
   // and load the index.html of the app.
+  // $FlowFixMe[incompatible-use] found when upgrading Flow
   mainWindow.loadURL('file://' + __dirname + '/app.html'); // eslint-disable-line no-path-concat
+  // $FlowFixMe[incompatible-use] found when upgrading Flow
   mainWindow.webContents.executeJavaScript(
     // We use this so that RN can keep relative JSX __source filenames
     // but "click to open in editor" still works. js1 passes project roots
@@ -42,6 +58,7 @@ app.on('ready', function() {
   );
 
   // Emitted when the window is closed.
+  // $FlowFixMe[incompatible-use] found when upgrading Flow
   mainWindow.on('closed', function() {
     mainWindow = null;
   });

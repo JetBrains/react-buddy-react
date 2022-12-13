@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -21,19 +21,19 @@ import type {ReactNodeList} from 'shared/ReactTypes';
 
 import {REACT_MEMO_TYPE, REACT_FORWARD_REF_TYPE} from 'shared/ReactSymbols';
 
-type Signature = {|
+type Signature = {
   ownKey: string,
   forceReset: boolean,
   fullKey: string | null, // Contains keys of nested Hooks. Computed lazily.
   getCustomHooks: () => Array<Function>,
-|};
+};
 
-type RendererHelpers = {|
+type RendererHelpers = {
   findHostInstancesForRefresh: FindHostInstancesForRefresh,
   scheduleRefresh: ScheduleRefresh,
   scheduleRoot: ScheduleRoot,
   setRefreshHandler: SetRefreshHandler,
-|};
+};
 
 if (!__DEV__) {
   throw new Error(
@@ -47,15 +47,16 @@ const PossiblyWeakMap = typeof WeakMap === 'function' ? WeakMap : Map;
 // We never remove these associations.
 // It's OK to reference families, but use WeakMap/Set for types.
 const allFamiliesByID: Map<string, Family> = new Map();
-const allFamiliesByType: // $FlowIssue
-WeakMap<any, Family> | Map<any, Family> = new PossiblyWeakMap();
-const allSignaturesByType: // $FlowIssue
+const allFamiliesByType:
+  | WeakMap<any, Family>
+  | Map<any, Family> = new PossiblyWeakMap();
+const allSignaturesByType: // $FlowFixMe
 WeakMap<any, Signature> | Map<any, Signature> = new PossiblyWeakMap();
 // This WeakMap is read by React, so we only put families
 // that have actually been edited here. This keeps checks fast.
-// $FlowIssue
-const updatedFamiliesByType: // $FlowIssue
-WeakMap<any, Family> | Map<any, Family> = new PossiblyWeakMap();
+const updatedFamiliesByType:
+  | WeakMap<any, Family>
+  | Map<any, Family> = new PossiblyWeakMap();
 
 // This is cleared on every performReactRefresh() call.
 // It is an array of [Family, NextType] tuples.
@@ -74,8 +75,7 @@ const failedRoots: Set<FiberRoot> = new Set();
 // In environments that support WeakMap, we also remember the last element for every root.
 // It needs to be weak because we do this even for roots that failed to mount.
 // If there is no WeakMap, we won't attempt to do retrying.
-// $FlowIssue
-const rootElements: WeakMap<any, ReactNodeList> | null = // $FlowIssue
+const rootElements: WeakMap<any, ReactNodeList> | null =
   typeof WeakMap === 'function' ? new WeakMap() : null;
 
 let isPerformingRefresh = false;
@@ -355,12 +355,25 @@ export function setSignature(
   getCustomHooks?: () => Array<Function>,
 ): void {
   if (__DEV__) {
-    allSignaturesByType.set(type, {
-      forceReset,
-      ownKey: key,
-      fullKey: null,
-      getCustomHooks: getCustomHooks || (() => []),
-    });
+    if (!allSignaturesByType.has(type)) {
+      allSignaturesByType.set(type, {
+        forceReset,
+        ownKey: key,
+        fullKey: null,
+        getCustomHooks: getCustomHooks || (() => []),
+      });
+    }
+    // Visit inner types because we might not have signed them.
+    if (typeof type === 'object' && type !== null) {
+      switch (getProperty(type, '$$typeof')) {
+        case REACT_FORWARD_REF_TYPE:
+          setSignature(type.render, key, forceReset, getCustomHooks);
+          break;
+        case REACT_MEMO_TYPE:
+          setSignature(type.type, key, forceReset, getCustomHooks);
+          break;
+      }
+    }
   } else {
     throw new Error(
       'Unexpected call to React Refresh in a production environment.',
@@ -447,20 +460,18 @@ export function injectIntoGlobalHook(globalObject: any): void {
       globalObject.__REACT_DEVTOOLS_GLOBAL_HOOK__ = hook = {
         renderers: new Map(),
         supportsFiber: true,
-        inject(injected) {
-          return nextID++;
-        },
-        onScheduleFiberRoot(
+        inject: injected => nextID++,
+        onScheduleFiberRoot: (
           id: number,
           root: FiberRoot,
           children: ReactNodeList,
-        ) {},
-        onCommitFiberRoot(
+        ) => {},
+        onCommitFiberRoot: (
           id: number,
           root: FiberRoot,
           maybePriorityLevel: mixed,
           didError: boolean,
-        ) {},
+        ) => {},
         onCommitFiberUnmount() {},
       };
     }
@@ -541,7 +552,9 @@ export function injectIntoGlobalHook(globalObject: any): void {
         if (alternate !== null) {
           const wasMounted =
             alternate.memoizedState != null &&
-            alternate.memoizedState.element != null;
+            alternate.memoizedState.element != null &&
+            mountedRoots.has(root);
+
           const isMounted =
             current.memoizedState != null &&
             current.memoizedState.element != null;
@@ -584,13 +597,13 @@ export function injectIntoGlobalHook(globalObject: any): void {
   }
 }
 
-export function hasUnrecoverableErrors() {
+export function hasUnrecoverableErrors(): boolean {
   // TODO: delete this after removing dependency in RN.
   return false;
 }
 
 // Exposed for testing.
-export function _getMountedRootCount() {
+export function _getMountedRootCount(): number {
   if (__DEV__) {
     return mountedRoots.size;
   } else {
@@ -609,57 +622,64 @@ export function _getMountedRootCount() {
 // function Hello() {
 //   const [foo, setFoo] = useState(0);
 //   const value = useCustomHook();
-//   _s(); /* Second call triggers collecting the custom Hook list.
+//   _s(); /* Call without arguments triggers collecting the custom Hook list.
 //          * This doesn't happen during the module evaluation because we
 //          * don't want to change the module order with inline requires.
 //          * Next calls are noops. */
 //   return <h1>Hi</h1>;
 // }
 //
-// /* First call specifies the signature: */
+// /* Call with arguments attaches the signature to the type: */
 // _s(
 //   Hello,
 //   'useState{[foo, setFoo]}(0)',
 //   () => [useCustomHook], /* Lazy to avoid triggering inline requires */
 // );
-type SignatureStatus = 'needsSignature' | 'needsCustomHooks' | 'resolved';
-export function createSignatureFunctionForTransform() {
+export function createSignatureFunctionForTransform(): <T>(
+  type: T,
+  key: string,
+  forceReset?: boolean,
+  getCustomHooks?: () => Array<Function>,
+) => T | void {
   if (__DEV__) {
-    // We'll fill in the signature in two steps.
-    // First, we'll know the signature itself. This happens outside the component.
-    // Then, we'll know the references to custom Hooks. This happens inside the component.
-    // After that, the returned function will be a fast path no-op.
-    let status: SignatureStatus = 'needsSignature';
     let savedType;
     let hasCustomHooks;
+    let didCollectHooks = false;
     return function<T>(
       type: T,
       key: string,
       forceReset?: boolean,
       getCustomHooks?: () => Array<Function>,
-    ): T {
-      switch (status) {
-        case 'needsSignature':
-          if (type !== undefined) {
-            // If we received an argument, this is the initial registration call.
-            savedType = type;
-            hasCustomHooks = typeof getCustomHooks === 'function';
-            setSignature(type, key, forceReset, getCustomHooks);
-            // The next call we expect is from inside a function, to fill in the custom Hooks.
-            status = 'needsCustomHooks';
-          }
-          break;
-        case 'needsCustomHooks':
-          if (hasCustomHooks) {
-            collectCustomHooksForSignature(savedType);
-          }
-          status = 'resolved';
-          break;
-        case 'resolved':
-          // Do nothing. Fast path for all future renders.
-          break;
+    ): T | void {
+      if (typeof key === 'string') {
+        // We're in the initial phase that associates signatures
+        // with the functions. Note this may be called multiple times
+        // in HOC chains like _s(hoc1(_s(hoc2(_s(actualFunction))))).
+        if (!savedType) {
+          // We're in the innermost call, so this is the actual type.
+          // $FlowFixMe[escaped-generic] discovered when updating Flow
+          savedType = type;
+          hasCustomHooks = typeof getCustomHooks === 'function';
+        }
+        // Set the signature for all types (even wrappers!) in case
+        // they have no signatures of their own. This is to prevent
+        // problems like https://github.com/facebook/react/issues/20417.
+        if (
+          type != null &&
+          (typeof type === 'function' || typeof type === 'object')
+        ) {
+          setSignature(type, key, forceReset, getCustomHooks);
+        }
+        return type;
+      } else {
+        // We're in the _s() call without arguments, which means
+        // this is the time to collect custom Hook signatures.
+        // Only do this once. This path is hot and runs *inside* every render!
+        if (!didCollectHooks && hasCustomHooks) {
+          didCollectHooks = true;
+          collectCustomHooksForSignature(savedType);
+        }
       }
-      return type;
     };
   } else {
     throw new Error(

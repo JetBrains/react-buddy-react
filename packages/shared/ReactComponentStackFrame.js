@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -123,6 +123,7 @@ export function describeNativeComponentFrame(
         } catch (x) {
           control = x;
         }
+        // $FlowFixMe[prop-missing] found when upgrading Flow
         fn.call(Fake.prototype);
       }
     } else {
@@ -131,6 +132,9 @@ export function describeNativeComponentFrame(
       } catch (x) {
         control = x;
       }
+      // TODO(luna): This will currently only throw if the function component
+      // tries to access React/ReactDOM/props. We should probably make this throw
+      // in simple components too
       fn();
     }
   } catch (sample) {
@@ -168,7 +172,15 @@ export function describeNativeComponentFrame(
               // The next one that isn't the same should be our match though.
               if (c < 0 || sampleLines[s] !== controlLines[c]) {
                 // V8 adds a "new" prefix for native classes. Let's remove it to make it prettier.
-                const frame = '\n' + sampleLines[s].replace(' at new ', ' at ');
+                let frame = '\n' + sampleLines[s].replace(' at new ', ' at ');
+
+                // If our component frame is labeled "<anonymous>"
+                // but we have a user-provided "displayName"
+                // splice it in to make the stack more readable.
+                if (fn.displayName && frame.includes('<anonymous>')) {
+                  frame = frame.replace('<anonymous>', fn.displayName);
+                }
+
                 if (__DEV__) {
                   if (typeof fn === 'function') {
                     componentFrameCache.set(fn, frame);

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -23,7 +23,6 @@ export const {
   getPendingChildren,
   getOrCreateRootContainer,
   createRoot,
-  createBlockingRoot,
   createLegacyRoot,
   getChildrenAsJSX,
   getPendingChildrenAsJSX,
@@ -39,8 +38,8 @@ export const {
   flushExpired,
   batchedUpdates,
   deferredUpdates,
-  unbatchedUpdates,
   discreteUpdates,
+  idleUpdates,
   flushDiscreteUpdates,
   flushSync,
   flushPassiveEffects,

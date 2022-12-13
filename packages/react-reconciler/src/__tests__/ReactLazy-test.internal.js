@@ -178,13 +178,13 @@ describe('ReactLazy', () => {
 
     await Promise.resolve();
 
+    expect(Scheduler).toFlushAndThrow('Element type is invalid');
     if (__DEV__) {
-      expect(console.error).toHaveBeenCalledTimes(1);
+      expect(console.error).toHaveBeenCalledTimes(3);
       expect(console.error.calls.argsFor(0)[0]).toContain(
         'Expected the result of a dynamic import() call',
       );
     }
-    expect(Scheduler).toFlushAndThrow('Element type is invalid');
   });
 
   it('throws if promise rejects', async () => {
@@ -293,7 +293,12 @@ describe('ReactLazy', () => {
 
     await Promise.resolve();
 
-    expect(Scheduler).toFlushAndYield(['Hi']);
+    expect(() => expect(Scheduler).toFlushAndYield(['Hi'])).toErrorDev(
+      'Warning: T: Support for defaultProps ' +
+        'will be removed from function components in a future major ' +
+        'release. Use JavaScript default parameters instead.',
+    );
+
     expect(root).toMatchRenderedOutput('Hi');
 
     T.defaultProps = {text: 'Hi again'};
@@ -343,7 +348,14 @@ describe('ReactLazy', () => {
 
     await Promise.resolve();
 
-    expect(Scheduler).toFlushAndYield(['Lazy', 'Sibling', 'A']);
+    expect(() =>
+      expect(Scheduler).toFlushAndYield(['Lazy', 'Sibling', 'A']),
+    ).toErrorDev(
+      'Warning: LazyImpl: Support for defaultProps ' +
+        'will be removed from function components in a future major ' +
+        'release. Use JavaScript default parameters instead.',
+    );
+
     expect(root).toMatchRenderedOutput('SiblingA');
 
     // Lazy should not re-render
@@ -643,7 +655,12 @@ describe('ReactLazy', () => {
     expect(root).not.toMatchRenderedOutput('Hi Bye');
 
     await Promise.resolve();
-    expect(Scheduler).toFlushAndYield(['Hi Bye']);
+    expect(() => expect(Scheduler).toFlushAndYield(['Hi Bye'])).toErrorDev(
+      'Warning: T: Support for defaultProps ' +
+        'will be removed from function components in a future major ' +
+        'release. Use JavaScript default parameters instead.',
+    );
+
     expect(root).toMatchRenderedOutput('Hi Bye');
 
     root.update(
@@ -732,7 +749,11 @@ describe('ReactLazy', () => {
     );
   });
 
-  async function verifyInnerPropTypesAreChecked(Add) {
+  async function verifyInnerPropTypesAreChecked(
+    Add,
+    shouldWarnAboutFunctionDefaultProps,
+    shouldWarnAboutMemoDefaultProps,
+  ) {
     const LazyAdd = lazy(() => fakeImport(Add));
     expect(() => {
       LazyAdd.propTypes = {};
@@ -753,15 +774,28 @@ describe('ReactLazy', () => {
     );
 
     expect(Scheduler).toFlushAndYield(['Loading...']);
+
     expect(root).not.toMatchRenderedOutput('22');
 
     // Mount
     await Promise.resolve();
     expect(() => {
       Scheduler.unstable_flushAll();
-    }).toErrorDev([
-      'Invalid prop `inner` of type `string` supplied to `Add`, expected `number`.',
-    ]);
+    }).toErrorDev(
+      shouldWarnAboutFunctionDefaultProps
+        ? [
+            'Add: Support for defaultProps will be removed from function components in a future major release. Use JavaScript default parameters instead.',
+            'Invalid prop `inner` of type `string` supplied to `Add`, expected `number`.',
+          ]
+        : shouldWarnAboutMemoDefaultProps
+        ? [
+            'Add: Support for defaultProps will be removed from memo components in a future major release. Use JavaScript default parameters instead.',
+            'Invalid prop `inner` of type `string` supplied to `Add`, expected `number`.',
+          ]
+        : [
+            'Invalid prop `inner` of type `string` supplied to `Add`, expected `number`.',
+          ],
+    );
     expect(root).toMatchRenderedOutput('22');
 
     // Update
@@ -792,7 +826,7 @@ describe('ReactLazy', () => {
     Add.defaultProps = {
       innerWithDefault: 42,
     };
-    await verifyInnerPropTypesAreChecked(Add);
+    await verifyInnerPropTypesAreChecked(Add, true);
   });
 
   it('respects propTypes on function component without defaultProps', async () => {
@@ -874,7 +908,7 @@ describe('ReactLazy', () => {
     Add.defaultProps = {
       innerWithDefault: 42,
     };
-    await verifyInnerPropTypesAreChecked(Add);
+    await verifyInnerPropTypesAreChecked(Add, false, true);
   });
 
   it('respects propTypes on outer memo component without defaultProps', async () => {
@@ -901,7 +935,7 @@ describe('ReactLazy', () => {
     Add.defaultProps = {
       innerWithDefault: 42,
     };
-    await verifyInnerPropTypesAreChecked(React.memo(Add));
+    await verifyInnerPropTypesAreChecked(React.memo(Add), true);
   });
 
   it('respects propTypes on inner memo component without defaultProps', async () => {
@@ -944,9 +978,10 @@ describe('ReactLazy', () => {
     await Promise.resolve();
     expect(() => {
       expect(Scheduler).toFlushAndYield(['Inner default text']);
-    }).toErrorDev(
+    }).toErrorDev([
+      'T: Support for defaultProps will be removed from function components in a future major release. Use JavaScript default parameters instead.',
       'The prop `text` is marked as required in `T`, but its value is `undefined`',
-    );
+    ]);
     expect(root).toMatchRenderedOutput('Inner default text');
 
     // Update
@@ -1058,7 +1093,11 @@ describe('ReactLazy', () => {
 
     // Mount
     await Promise.resolve();
-    expect(Scheduler).toFlushWithoutYielding();
+    expect(() => {
+      expect(Scheduler).toFlushWithoutYielding();
+    }).toErrorDev(
+      'Unknown: Support for defaultProps will be removed from memo components in a future major release. Use JavaScript default parameters instead.',
+    );
     expect(root).toMatchRenderedOutput('4');
 
     // Update (shallowly equal)
@@ -1142,7 +1181,12 @@ describe('ReactLazy', () => {
 
     // Mount
     await Promise.resolve();
-    expect(Scheduler).toFlushWithoutYielding();
+    expect(() => {
+      expect(Scheduler).toFlushWithoutYielding();
+    }).toErrorDev([
+      'Memo: Support for defaultProps will be removed from memo components in a future major release. Use JavaScript default parameters instead.',
+      'Unknown: Support for defaultProps will be removed from memo components in a future major release. Use JavaScript default parameters instead.',
+    ]);
     expect(root).toMatchRenderedOutput('4');
 
     // Update
@@ -1268,9 +1312,11 @@ describe('ReactLazy', () => {
     expect(componentStackMessage).toContain('in Lazy');
   });
 
-  // @gate enableLazyElements
   it('mount and reorder lazy types', async () => {
     class Child extends React.Component {
+      componentWillUnmount() {
+        Scheduler.unstable_yieldValue('Did unmount: ' + this.props.label);
+      }
       componentDidMount() {
         Scheduler.unstable_yieldValue('Did mount: ' + this.props.label);
       }
@@ -1348,6 +1394,8 @@ describe('ReactLazy', () => {
     expect(Scheduler).toFlushAndYield(['Init B2', 'Loading...']);
     jest.runAllTimers();
 
+    expect(Scheduler).toHaveYielded(['Did unmount: A', 'Did unmount: B']);
+
     // The suspense boundary should've triggered now.
     expect(root).toMatchRenderedOutput('Loading...');
     await resolveB2({default: ChildB});
@@ -1359,13 +1407,12 @@ describe('ReactLazy', () => {
     expect(Scheduler).toFlushAndYield([
       'b',
       'a',
-      'Did update: b',
-      'Did update: a',
+      'Did mount: b',
+      'Did mount: a',
     ]);
     expect(root).toMatchRenderedOutput('ba');
   });
 
-  // @gate enableLazyElements
   it('mount and reorder lazy types (legacy mode)', async () => {
     class Child extends React.Component {
       componentDidMount() {
@@ -1454,7 +1501,6 @@ describe('ReactLazy', () => {
     expect(root).toMatchRenderedOutput('ba');
   });
 
-  // @gate enableLazyElements
   it('mount and reorder lazy elements', async () => {
     class Child extends React.Component {
       componentDidMount() {
@@ -1514,7 +1560,13 @@ describe('ReactLazy', () => {
     expect(root).toMatchRenderedOutput('AB');
 
     // Swap the position of A and B
-    root.update(<Parent swap={true} />);
+    if (gate(flags => flags.enableSyncDefaultUpdates)) {
+      React.startTransition(() => {
+        root.update(<Parent swap={true} />);
+      });
+    } else {
+      root.update(<Parent swap={true} />);
+    }
     expect(Scheduler).toFlushAndYield(['Init B2', 'Loading...']);
     await lazyChildB2;
     // We need to flush to trigger the second one to load.
@@ -1530,7 +1582,6 @@ describe('ReactLazy', () => {
     expect(root).toMatchRenderedOutput('ba');
   });
 
-  // @gate enableLazyElements
   it('mount and reorder lazy elements (legacy mode)', async () => {
     class Child extends React.Component {
       componentDidMount() {

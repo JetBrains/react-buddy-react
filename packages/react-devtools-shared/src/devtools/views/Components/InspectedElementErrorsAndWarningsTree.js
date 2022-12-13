@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,30 +8,75 @@
  */
 
 import * as React from 'react';
-import {useContext} from 'react';
+import {
+  useContext,
+  unstable_useCacheRefresh as useCacheRefresh,
+  useTransition,
+} from 'react';
 import Button from '../Button';
 import ButtonIcon from '../ButtonIcon';
 import Store from '../../store';
 import sharedStyles from './InspectedElementSharedStyles.css';
 import styles from './InspectedElementErrorsAndWarningsTree.css';
 import {SettingsContext} from '../Settings/SettingsContext';
-import {InspectedElementContext} from './InspectedElementContext';
+import {
+  clearErrorsForElement as clearErrorsForElementAPI,
+  clearWarningsForElement as clearWarningsForElementAPI,
+} from 'react-devtools-shared/src/backendAPI';
 
 import type {InspectedElement} from './types';
 import type {FrontendBridge} from 'react-devtools-shared/src/bridge';
 
-type Props = {|
+type Props = {
   bridge: FrontendBridge,
   inspectedElement: InspectedElement,
   store: Store,
-|};
+};
 
 export default function InspectedElementErrorsAndWarningsTree({
   bridge,
   inspectedElement,
   store,
-}: Props) {
-  const {refreshInspectedElement} = useContext(InspectedElementContext);
+}: Props): React.Node {
+  const refresh = useCacheRefresh();
+
+  const [
+    isErrorsTransitionPending,
+    startClearErrorsTransition,
+  ] = useTransition();
+  const clearErrorsForInspectedElement = () => {
+    const {id} = inspectedElement;
+    const rendererID = store.getRendererIDForElement(id);
+    if (rendererID !== null) {
+      startClearErrorsTransition(() => {
+        clearErrorsForElementAPI({
+          bridge,
+          id,
+          rendererID,
+        });
+        refresh();
+      });
+    }
+  };
+
+  const [
+    isWarningsTransitionPending,
+    startClearWarningsTransition,
+  ] = useTransition();
+  const clearWarningsForInspectedElement = () => {
+    const {id} = inspectedElement;
+    const rendererID = store.getRendererIDForElement(id);
+    if (rendererID !== null) {
+      startClearWarningsTransition(() => {
+        clearWarningsForElementAPI({
+          bridge,
+          id,
+          rendererID,
+        });
+        refresh();
+      });
+    }
+  };
 
   const {showInlineWarningsAndErrors} = useContext(SettingsContext);
   if (!showInlineWarningsAndErrors) {
@@ -40,26 +85,6 @@ export default function InspectedElementErrorsAndWarningsTree({
 
   const {errors, warnings} = inspectedElement;
 
-  const clearErrors = () => {
-    const {id} = inspectedElement;
-    store.clearErrorsForElement(id);
-
-    // Immediately poll for updated data.
-    // This avoids a delay between clicking the clear button and refreshing errors.
-    // Ideally this would be done with useTranstion but that requires updating to a newer Cache strategy.
-    refreshInspectedElement();
-  };
-
-  const clearWarnings = () => {
-    const {id} = inspectedElement;
-    store.clearWarningsForElement(id);
-
-    // Immediately poll for updated data.
-    // This avoids a delay between clicking the clear button and refreshing warnings.
-    // Ideally this would be done with useTranstion but that requires updating to a newer Cache strategy.
-    refreshInspectedElement();
-  };
-
   return (
     <React.Fragment>
       {errors.length > 0 && (
@@ -67,8 +92,9 @@ export default function InspectedElementErrorsAndWarningsTree({
           badgeClassName={styles.ErrorBadge}
           bridge={bridge}
           className={styles.ErrorTree}
-          clearMessages={clearErrors}
+          clearMessages={clearErrorsForInspectedElement}
           entries={errors}
+          isTransitionPending={isErrorsTransitionPending}
           label="errors"
           messageClassName={styles.Error}
         />
@@ -78,8 +104,9 @@ export default function InspectedElementErrorsAndWarningsTree({
           badgeClassName={styles.WarningBadge}
           bridge={bridge}
           className={styles.WarningTree}
-          clearMessages={clearWarnings}
+          clearMessages={clearWarningsForInspectedElement}
           entries={warnings}
+          isTransitionPending={isWarningsTransitionPending}
           label="warnings"
           messageClassName={styles.Warning}
         />
@@ -88,15 +115,16 @@ export default function InspectedElementErrorsAndWarningsTree({
   );
 }
 
-type TreeProps = {|
+type TreeProps = {
   badgeClassName: string,
   actions: React$Node,
   className: string,
-  clearMessages: () => {},
+  clearMessages: () => void,
   entries: Array<[string, number]>,
+  isTransitionPending: boolean,
   label: string,
   messageClassName: string,
-|};
+};
 
 function Tree({
   badgeClassName,
@@ -104,6 +132,7 @@ function Tree({
   className,
   clearMessages,
   entries,
+  isTransitionPending,
   label,
   messageClassName,
 }: TreeProps) {
@@ -115,6 +144,7 @@ function Tree({
       <div className={`${sharedStyles.HeaderRow} ${styles.HeaderRow}`}>
         <div className={sharedStyles.Header}>{label}</div>
         <Button
+          disabled={isTransitionPending}
           onClick={clearMessages}
           title={`Clear all ${label} for this component`}>
           <ButtonIcon type="clear" />
@@ -133,12 +163,12 @@ function Tree({
   );
 }
 
-type ErrorOrWarningViewProps = {|
+type ErrorOrWarningViewProps = {
   badgeClassName: string,
   className: string,
   count: number,
   message: string,
-|};
+};
 
 function ErrorOrWarningView({
   className,

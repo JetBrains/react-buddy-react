@@ -1,12 +1,16 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
+ * @flow
  */
 
 /* eslint-disable no-var */
+/* eslint-disable react-internal/prod-error-codes */
+
+import type {PriorityLevel} from '../SchedulerPriorities';
 
 import {
   enableSchedulerDebugging,
@@ -23,7 +27,6 @@ import {
   IdlePriority,
 } from '../SchedulerPriorities';
 import {
-  sharedProfilingBuffer,
   markTaskRun,
   markTaskYield,
   markTaskCompleted,
@@ -35,6 +38,18 @@ import {
   stopLoggingProfilingEvents,
   startLoggingProfilingEvents,
 } from '../SchedulerProfiling';
+
+type Callback = boolean => ?Callback;
+
+type Task = {
+  id: number,
+  callback: Callback | null,
+  priorityLevel: PriorityLevel,
+  startTime: number,
+  expirationTime: number,
+  sortIndex: number,
+  isQueued?: boolean,
+};
 
 // Max 31 bit integer. The max integer size in V8 for 32-bit systems.
 // Math.pow(2, 30) - 1
@@ -52,7 +67,7 @@ var IDLE_PRIORITY_TIMEOUT = maxSigned31BitInt;
 
 // Tasks are stored on a min heap
 var taskQueue = [];
-var timerQueue = [];
+var timerQueue: Array<Task> = [];
 
 // Incrementing id counter. Used to maintain insertion order.
 var taskIdCounter = 1;
@@ -63,14 +78,19 @@ var isSchedulerPaused = false;
 var currentTask = null;
 var currentPriorityLevel = NormalPriority;
 
-// This is set while performing work, to prevent re-entrancy.
+// This is set while performing work, to prevent re-entrance.
 var isPerformingWork = false;
 
 var isHostCallbackScheduled = false;
 var isHostTimeoutScheduled = false;
 
 let currentMockTime: number = 0;
-let scheduledCallback: ((boolean, number) => void) | null = null;
+let scheduledCallback:
+  | null
+  | ((
+      hasTimeRemaining: boolean,
+      initialTime: DOMHighResTimeStamp | number,
+    ) => boolean) = null;
 let scheduledTimeout: (number => void) | null = null;
 let timeoutTime: number = -1;
 let yieldedValues: Array<mixed> | null = null;
@@ -80,7 +100,13 @@ let isFlushing: boolean = false;
 let needsPaint: boolean = false;
 let shouldYieldForPaint: boolean = false;
 
-function advanceTimers(currentTime) {
+var disableYieldValue = false;
+
+function setDisableYieldValue(newValue: boolean) {
+  disableYieldValue = newValue;
+}
+
+function advanceTimers(currentTime: number) {
   // Check for tasks that are no longer delayed and add them to the queue.
   let timer = peek(timerQueue);
   while (timer !== null) {
@@ -104,7 +130,7 @@ function advanceTimers(currentTime) {
   }
 }
 
-function handleTimeout(currentTime) {
+function handleTimeout(currentTime: number) {
   isHostTimeoutScheduled = false;
   advanceTimers(currentTime);
 
@@ -121,7 +147,7 @@ function handleTimeout(currentTime) {
   }
 }
 
-function flushWork(hasTimeRemaining, initialTime) {
+function flushWork(hasTimeRemaining: boolean, initialTime: number) {
   if (enableProfiling) {
     markSchedulerUnsuspended(initialTime);
   }
@@ -143,7 +169,9 @@ function flushWork(hasTimeRemaining, initialTime) {
       } catch (error) {
         if (currentTask !== null) {
           const currentTime = getCurrentTime();
+          // $FlowFixMe[incompatible-call] found when upgrading Flow
           markTaskErrored(currentTask, currentTime);
+          // $FlowFixMe[incompatible-use] found when upgrading Flow
           currentTask.isQueued = false;
         }
         throw error;
@@ -163,7 +191,7 @@ function flushWork(hasTimeRemaining, initialTime) {
   }
 }
 
-function workLoop(hasTimeRemaining, initialTime) {
+function workLoop(hasTimeRemaining: boolean, initialTime: number): boolean {
   let currentTime = initialTime;
   advanceTimers(currentTime);
   currentTask = peek(taskQueue);
@@ -178,27 +206,52 @@ function workLoop(hasTimeRemaining, initialTime) {
       // This currentTask hasn't expired, and we've reached the deadline.
       break;
     }
+    // $FlowFixMe[incompatible-use] found when upgrading Flow
     const callback = currentTask.callback;
     if (typeof callback === 'function') {
+      // $FlowFixMe[incompatible-use] found when upgrading Flow
       currentTask.callback = null;
+      // $FlowFixMe[incompatible-use] found when upgrading Flow
       currentPriorityLevel = currentTask.priorityLevel;
+      // $FlowFixMe[incompatible-use] found when upgrading Flow
       const didUserCallbackTimeout = currentTask.expirationTime <= currentTime;
-      markTaskRun(currentTask, currentTime);
+      if (enableProfiling) {
+        // $FlowFixMe[incompatible-call] found when upgrading Flow
+        markTaskRun(currentTask, currentTime);
+      }
       const continuationCallback = callback(didUserCallbackTimeout);
       currentTime = getCurrentTime();
       if (typeof continuationCallback === 'function') {
+        // If a continuation is returned, immediately yield to the main thread
+        // regardless of how much time is left in the current time slice.
+        // $FlowFixMe[incompatible-use] found when upgrading Flow
         currentTask.callback = continuationCallback;
-        markTaskYield(currentTask, currentTime);
+        if (enableProfiling) {
+          // $FlowFixMe[incompatible-call] found when upgrading Flow
+          markTaskYield(currentTask, currentTime);
+        }
+        advanceTimers(currentTime);
+
+        if (shouldYieldForPaint) {
+          needsPaint = true;
+          return true;
+        } else {
+          // If `shouldYieldForPaint` is false, we keep flushing synchronously
+          // without yielding to the main thread. This is the behavior of the
+          // `toFlushAndYield` and `toFlushAndYieldThrough` testing helpers .
+        }
       } else {
         if (enableProfiling) {
+          // $FlowFixMe[incompatible-call] found when upgrading Flow
           markTaskCompleted(currentTask, currentTime);
+          // $FlowFixMe[incompatible-use] found when upgrading Flow
           currentTask.isQueued = false;
         }
         if (currentTask === peek(taskQueue)) {
           pop(taskQueue);
         }
+        advanceTimers(currentTime);
       }
-      advanceTimers(currentTime);
     } else {
       pop(taskQueue);
     }
@@ -216,7 +269,10 @@ function workLoop(hasTimeRemaining, initialTime) {
   }
 }
 
-function unstable_runWithPriority(priorityLevel, eventHandler) {
+function unstable_runWithPriority<T>(
+  priorityLevel: PriorityLevel,
+  eventHandler: () => T,
+): T {
   switch (priorityLevel) {
     case ImmediatePriority:
     case UserBlockingPriority:
@@ -238,7 +294,7 @@ function unstable_runWithPriority(priorityLevel, eventHandler) {
   }
 }
 
-function unstable_next(eventHandler) {
+function unstable_next<T>(eventHandler: () => T): T {
   var priorityLevel;
   switch (currentPriorityLevel) {
     case ImmediatePriority:
@@ -263,8 +319,9 @@ function unstable_next(eventHandler) {
   }
 }
 
-function unstable_wrapCallback(callback) {
+function unstable_wrapCallback<T: (...Array<mixed>) => mixed>(callback: T): T {
   var parentPriorityLevel = currentPriorityLevel;
+  // $FlowFixMe[incompatible-return]
   return function() {
     // This is a fork of runWithPriority, inlined for performance.
     var previousPriorityLevel = currentPriorityLevel;
@@ -278,7 +335,11 @@ function unstable_wrapCallback(callback) {
   };
 }
 
-function unstable_scheduleCallback(priorityLevel, callback, options) {
+function unstable_scheduleCallback(
+  priorityLevel: PriorityLevel,
+  callback: Callback,
+  options?: {delay: number},
+): Task {
   var currentTime = getCurrentTime();
 
   var startTime;
@@ -315,7 +376,7 @@ function unstable_scheduleCallback(priorityLevel, callback, options) {
 
   var expirationTime = startTime + timeout;
 
-  var newTask = {
+  var newTask: Task = {
     id: taskIdCounter++,
     callback,
     priorityLevel,
@@ -372,11 +433,11 @@ function unstable_continueExecution() {
   }
 }
 
-function unstable_getFirstCallbackNode() {
+function unstable_getFirstCallbackNode(): Task | null {
   return peek(taskQueue);
 }
 
-function unstable_cancelCallback(task) {
+function unstable_cancelCallback(task: Task) {
   if (enableProfiling) {
     if (task.isQueued) {
       const currentTime = getCurrentTime();
@@ -391,11 +452,11 @@ function unstable_cancelCallback(task) {
   task.callback = null;
 }
 
-function unstable_getCurrentPriorityLevel() {
+function unstable_getCurrentPriorityLevel(): PriorityLevel {
   return currentPriorityLevel;
 }
 
-function requestHostCallback(callback: boolean => void) {
+function requestHostCallback(callback: (boolean, number) => boolean) {
   scheduledCallback = callback;
 }
 
@@ -411,6 +472,7 @@ function cancelHostTimeout(): void {
 
 function shouldYieldToHost(): boolean {
   if (
+    (expectedNumberOfYields === 0 && yieldedValues === null) ||
     (expectedNumberOfYields !== -1 &&
       yieldedValues !== null &&
       yieldedValues.length >= expectedNumberOfYields) ||
@@ -471,7 +533,7 @@ function unstable_flushNumberOfYields(count: number): void {
   }
 }
 
-function unstable_flushUntilNextPaint(): void {
+function unstable_flushUntilNextPaint(): false {
   if (isFlushing) {
     throw new Error('Already flushing work.');
   }
@@ -494,6 +556,11 @@ function unstable_flushUntilNextPaint(): void {
       isFlushing = false;
     }
   }
+  return false;
+}
+
+function unstable_hasPendingWork(): boolean {
+  return scheduledCallback !== null;
 }
 
 function unstable_flushExpired() {
@@ -566,7 +633,7 @@ function unstable_flushAll(): void {
 
 function unstable_yieldValue(value: mixed): void {
   // eslint-disable-next-line react-internal/no-production-logging
-  if (console.log.name === 'disabledLog') {
+  if (console.log.name === 'disabledLog' || disableYieldValue) {
     // If console.log has been patched, we assume we're in render
     // replaying and we ignore any values yielding in the second pass.
     return;
@@ -580,7 +647,7 @@ function unstable_yieldValue(value: mixed): void {
 
 function unstable_advanceTime(ms: number) {
   // eslint-disable-next-line react-internal/no-production-logging
-  if (console.log.name === 'disabledLog') {
+  if (console.log.name === 'disabledLog' || disableYieldValue) {
     // If console.log has been patched, we assume we're in render
     // replaying and we ignore any time advancing in the second pass.
     return;
@@ -621,16 +688,20 @@ export {
   unstable_flushExpired,
   unstable_clearYields,
   unstable_flushUntilNextPaint,
+  unstable_hasPendingWork,
   unstable_flushAll,
   unstable_yieldValue,
   unstable_advanceTime,
   reset,
+  setDisableYieldValue as unstable_setDisableYieldValue,
 };
 
-export const unstable_Profiling = enableProfiling
+export const unstable_Profiling: {
+  startLoggingProfilingEvents(): void,
+  stopLoggingProfilingEvents(): ArrayBuffer | null,
+} | null = enableProfiling
   ? {
       startLoggingProfilingEvents,
       stopLoggingProfilingEvents,
-      sharedProfilingBuffer,
     }
   : null;

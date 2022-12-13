@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,11 +9,16 @@
 
 import type {Fiber} from 'react-reconciler/src/ReactInternalTypes';
 import type {CurrentDispatcherRef, ReactRenderer, WorkTagMap} from './types';
+import type {BrowserTheme} from 'react-devtools-shared/src/devtools/views/DevTools';
+import {format, formatWithStyles} from './utils';
 
 import {getInternalReactConstants} from './renderer';
 import {getStackByFiberInDevAndProd} from './DevToolsFiberComponentStack';
+import {consoleManagedByDevToolsDuringStrictMode} from 'react-devtools-feature-flags';
+import {castBool, castBrowserTheme} from '../utils';
 
-const APPEND_STACK_TO_METHODS = ['error', 'trace', 'warn'];
+const OVERRIDE_CONSOLE_METHODS = ['error', 'trace', 'warn'];
+const DIMMED_NODE_CONSOLE_COLOR = '\x1b[2m%s\x1b[0m';
 
 // React's custom built component stack strings match "\s{4}in"
 // Chrome's prefix matches "\s{4}at"
@@ -26,6 +31,37 @@ export function isStringComponentStack(text: string): boolean {
   return PREFIX_REGEX.test(text) || ROW_COLUMN_NUMBER_REGEX.test(text);
 }
 
+const STYLE_DIRECTIVE_REGEX = /^%c/;
+
+// This function tells whether or not the arguments for a console
+// method has been overridden by the patchForStrictMode function.
+// If it has we'll need to do some special formatting of the arguments
+// so the console color stays consistent
+function isStrictModeOverride(args: Array<string>, method: string): boolean {
+  return (
+    args.length >= 2 &&
+    STYLE_DIRECTIVE_REGEX.test(args[0]) &&
+    args[1] === `color: ${getConsoleColor(method) || ''}`
+  );
+}
+
+function getConsoleColor(method: string): ?string {
+  switch (method) {
+    case 'warn':
+      return consoleSettingsRef.browserTheme === 'light'
+        ? process.env.LIGHT_MODE_DIMMED_WARNING_COLOR
+        : process.env.DARK_MODE_DIMMED_WARNING_COLOR;
+    case 'error':
+      return consoleSettingsRef.browserTheme === 'light'
+        ? process.env.LIGHT_MODE_DIMMED_ERROR_COLOR
+        : process.env.DARK_MODE_DIMMED_ERROR_COLOR;
+    case 'log':
+    default:
+      return consoleSettingsRef.browserTheme === 'light'
+        ? process.env.LIGHT_MODE_DIMMED_LOG_COLOR
+        : process.env.DARK_MODE_DIMMED_LOG_COLOR;
+  }
+}
 type OnErrorOrWarning = (
   fiber: Fiber,
   type: 'error' | 'warn',
@@ -34,12 +70,12 @@ type OnErrorOrWarning = (
 
 const injectedRenderers: Map<
   ReactRenderer,
-  {|
+  {
     currentDispatcherRef: CurrentDispatcherRef,
     getCurrentFiber: () => Fiber | null,
     onErrorOrWarning: ?OnErrorOrWarning,
     workTagMap: WorkTagMap,
-  |},
+  },
 > = new Map();
 
 let targetConsole: Object = console;
@@ -49,6 +85,11 @@ for (const method in console) {
 }
 
 let unpatchFn: null | (() => void) = null;
+
+let isNode = false;
+try {
+  isNode = this === global;
+} catch (error) {}
 
 // Enables e.g. Jest tests to inject a mock console object.
 export function dangerous_setTargetConsoleForTesting(
@@ -99,6 +140,16 @@ const consoleSettingsRef = {
   appendComponentStack: false,
   breakOnConsoleErrors: false,
   showInlineWarningsAndErrors: false,
+  hideConsoleLogsInStrictMode: false,
+  browserTheme: 'dark',
+};
+
+export type ConsolePatchSettings = {
+  appendComponentStack: boolean,
+  breakOnConsoleErrors: boolean,
+  showInlineWarningsAndErrors: boolean,
+  hideConsoleLogsInStrictMode: boolean,
+  browserTheme: BrowserTheme,
 };
 
 // Patches console methods to append component stack for the current fiber.
@@ -107,55 +158,63 @@ export function patch({
   appendComponentStack,
   breakOnConsoleErrors,
   showInlineWarningsAndErrors,
-}: {
-  appendComponentStack: boolean,
-  breakOnConsoleErrors: boolean,
-  showInlineWarningsAndErrors: boolean,
-}): void {
+  hideConsoleLogsInStrictMode,
+  browserTheme,
+}: ConsolePatchSettings): void {
   // Settings may change after we've patched the console.
   // Using a shared ref allows the patch function to read the latest values.
   consoleSettingsRef.appendComponentStack = appendComponentStack;
   consoleSettingsRef.breakOnConsoleErrors = breakOnConsoleErrors;
   consoleSettingsRef.showInlineWarningsAndErrors = showInlineWarningsAndErrors;
+  consoleSettingsRef.hideConsoleLogsInStrictMode = hideConsoleLogsInStrictMode;
+  consoleSettingsRef.browserTheme = browserTheme;
 
-  if (unpatchFn !== null) {
-    // Don't patch twice.
-    return;
-  }
-
-  const originalConsoleMethods = {};
-
-  unpatchFn = () => {
-    for (const method in originalConsoleMethods) {
-      try {
-        // $FlowFixMe property error|warn is not writable.
-        targetConsole[method] = originalConsoleMethods[method];
-      } catch (error) {}
+  if (
+    appendComponentStack ||
+    breakOnConsoleErrors ||
+    showInlineWarningsAndErrors
+  ) {
+    if (unpatchFn !== null) {
+      // Don't patch twice.
+      return;
     }
-  };
 
-  APPEND_STACK_TO_METHODS.forEach(method => {
-    try {
-      const originalMethod = (originalConsoleMethods[method] =
-        targetConsole[method]);
+    const originalConsoleMethods = {};
 
-      const overrideMethod = (...args) => {
-        let shouldAppendWarningStack = false;
-        if (consoleSettingsRef.appendComponentStack) {
-          const lastArg = args.length > 0 ? args[args.length - 1] : null;
-          const alreadyHasComponentStack =
-            lastArg !== null && isStringComponentStack(lastArg);
+    unpatchFn = () => {
+      for (const method in originalConsoleMethods) {
+        try {
+          targetConsole[method] = originalConsoleMethods[method];
+        } catch (error) {}
+      }
+    };
 
-          // If we are ever called with a string that already has a component stack,
-          // e.g. a React error/warning, don't append a second stack.
-          shouldAppendWarningStack = !alreadyHasComponentStack;
-        }
+    OVERRIDE_CONSOLE_METHODS.forEach(method => {
+      try {
+        const originalMethod = (originalConsoleMethods[method] = targetConsole[
+          method
+        ].__REACT_DEVTOOLS_ORIGINAL_METHOD__
+          ? targetConsole[method].__REACT_DEVTOOLS_ORIGINAL_METHOD__
+          : targetConsole[method]);
 
-        const shouldShowInlineWarningsAndErrors =
-          consoleSettingsRef.showInlineWarningsAndErrors &&
-          (method === 'error' || method === 'warn');
+        const overrideMethod = (...args) => {
+          let shouldAppendWarningStack = false;
+          if (method !== 'log') {
+            if (consoleSettingsRef.appendComponentStack) {
+              const lastArg = args.length > 0 ? args[args.length - 1] : null;
+              const alreadyHasComponentStack =
+                typeof lastArg === 'string' && isStringComponentStack(lastArg);
 
-        if (shouldAppendWarningStack || shouldShowInlineWarningsAndErrors) {
+              // If we are ever called with a string that already has a component stack,
+              // e.g. a React error/warning, don't append a second stack.
+              shouldAppendWarningStack = !alreadyHasComponentStack;
+            }
+          }
+
+          const shouldShowInlineWarningsAndErrors =
+            consoleSettingsRef.showInlineWarningsAndErrors &&
+            (method === 'error' || method === 'warn');
+
           // Search for the first renderer that has a current Fiber.
           // We don't handle the edge case of stacks for more than one (e.g. interleaved renderers?)
           // eslint-disable-next-line no-for-of-loops/no-for-of-loops
@@ -170,7 +229,7 @@ export function patch({
               try {
                 if (shouldShowInlineWarningsAndErrors) {
                   // patch() is called by two places: (1) the hook and (2) the renderer backend.
-                  // The backend is what impliments a message queue, so it's the only one that injects onErrorOrWarning.
+                  // The backend is what implements a message queue, so it's the only one that injects onErrorOrWarning.
                   if (typeof onErrorOrWarning === 'function') {
                     onErrorOrWarning(
                       current,
@@ -188,37 +247,46 @@ export function patch({
                     currentDispatcherRef,
                   );
                   if (componentStack !== '') {
-                    args.push(componentStack);
+                    if (isStrictModeOverride(args, method)) {
+                      args[0] = `${args[0]} %s`;
+                      args.push(componentStack);
+                    } else {
+                      args.push(componentStack);
+                    }
                   }
                 }
               } catch (error) {
                 // Don't let a DevTools or React internal error interfere with logging.
+                setTimeout(() => {
+                  throw error;
+                }, 0);
               } finally {
                 break;
               }
             }
           }
-        }
 
-        if (consoleSettingsRef.breakOnConsoleErrors) {
-          // --- Welcome to debugging with React DevTools ---
-          // This debugger statement means that you've enabled the "break on warnings" feature.
-          // Use the browser's Call Stack panel to step out of this override function-
-          // to where the original warning or error was logged.
-          // eslint-disable-next-line no-debugger
-          debugger;
-        }
+          if (consoleSettingsRef.breakOnConsoleErrors) {
+            // --- Welcome to debugging with React DevTools ---
+            // This debugger statement means that you've enabled the "break on warnings" feature.
+            // Use the browser's Call Stack panel to step out of this override function-
+            // to where the original warning or error was logged.
+            // eslint-disable-next-line no-debugger
+            debugger;
+          }
 
-        originalMethod(...args);
-      };
+          originalMethod(...args);
+        };
 
-      overrideMethod.__REACT_DEVTOOLS_ORIGINAL_METHOD__ = originalMethod;
-      originalMethod.__REACT_DEVTOOLS_OVERRIDE_METHOD__ = overrideMethod;
+        overrideMethod.__REACT_DEVTOOLS_ORIGINAL_METHOD__ = originalMethod;
+        originalMethod.__REACT_DEVTOOLS_OVERRIDE_METHOD__ = overrideMethod;
 
-      // $FlowFixMe property error|warn is not writable.
-      targetConsole[method] = overrideMethod;
-    } catch (error) {}
-  });
+        targetConsole[method] = overrideMethod;
+      } catch (error) {}
+    });
+  } else {
+    unpatch();
+  }
 }
 
 // Removed component stack patch from console methods.
@@ -227,4 +295,117 @@ export function unpatch(): void {
     unpatchFn();
     unpatchFn = null;
   }
+}
+
+let unpatchForStrictModeFn: null | (() => void) = null;
+
+// NOTE: KEEP IN SYNC with src/hook.js:patchConsoleForInitialRenderInStrictMode
+export function patchForStrictMode() {
+  if (consoleManagedByDevToolsDuringStrictMode) {
+    const overrideConsoleMethods = [
+      'error',
+      'group',
+      'groupCollapsed',
+      'info',
+      'log',
+      'trace',
+      'warn',
+    ];
+
+    if (unpatchForStrictModeFn !== null) {
+      // Don't patch twice.
+      return;
+    }
+
+    const originalConsoleMethods = {};
+
+    unpatchForStrictModeFn = () => {
+      for (const method in originalConsoleMethods) {
+        try {
+          targetConsole[method] = originalConsoleMethods[method];
+        } catch (error) {}
+      }
+    };
+
+    overrideConsoleMethods.forEach(method => {
+      try {
+        const originalMethod = (originalConsoleMethods[method] = targetConsole[
+          method
+        ].__REACT_DEVTOOLS_STRICT_MODE_ORIGINAL_METHOD__
+          ? targetConsole[method].__REACT_DEVTOOLS_STRICT_MODE_ORIGINAL_METHOD__
+          : targetConsole[method]);
+
+        const overrideMethod = (...args) => {
+          if (!consoleSettingsRef.hideConsoleLogsInStrictMode) {
+            // Dim the text color of the double logs if we're not
+            // hiding them.
+            if (isNode) {
+              originalMethod(DIMMED_NODE_CONSOLE_COLOR, format(...args));
+            } else {
+              const color = getConsoleColor(method);
+              if (color) {
+                originalMethod(...formatWithStyles(args, `color: ${color}`));
+              } else {
+                throw Error('Console color is not defined');
+              }
+            }
+          }
+        };
+
+        overrideMethod.__REACT_DEVTOOLS_STRICT_MODE_ORIGINAL_METHOD__ = originalMethod;
+        originalMethod.__REACT_DEVTOOLS_STRICT_MODE_OVERRIDE_METHOD__ = overrideMethod;
+
+        targetConsole[method] = overrideMethod;
+      } catch (error) {}
+    });
+  }
+}
+
+// NOTE: KEEP IN SYNC with src/hook.js:unpatchConsoleForInitialRenderInStrictMode
+export function unpatchForStrictMode(): void {
+  if (consoleManagedByDevToolsDuringStrictMode) {
+    if (unpatchForStrictModeFn !== null) {
+      unpatchForStrictModeFn();
+      unpatchForStrictModeFn = null;
+    }
+  }
+}
+
+export function patchConsoleUsingWindowValues() {
+  const appendComponentStack =
+    castBool(window.__REACT_DEVTOOLS_APPEND_COMPONENT_STACK__) ?? true;
+  const breakOnConsoleErrors =
+    castBool(window.__REACT_DEVTOOLS_BREAK_ON_CONSOLE_ERRORS__) ?? false;
+  const showInlineWarningsAndErrors =
+    castBool(window.__REACT_DEVTOOLS_SHOW_INLINE_WARNINGS_AND_ERRORS__) ?? true;
+  const hideConsoleLogsInStrictMode =
+    castBool(window.__REACT_DEVTOOLS_HIDE_CONSOLE_LOGS_IN_STRICT_MODE__) ??
+    false;
+  const browserTheme =
+    castBrowserTheme(window.__REACT_DEVTOOLS_BROWSER_THEME__) ?? 'dark';
+
+  patch({
+    appendComponentStack,
+    breakOnConsoleErrors,
+    showInlineWarningsAndErrors,
+    hideConsoleLogsInStrictMode,
+    browserTheme,
+  });
+}
+
+// After receiving cached console patch settings from React Native, we set them on window.
+// When the console is initially patched (in renderer.js and hook.js), these values are read.
+// The browser extension (etc.) sets these values on window, but through another method.
+export function writeConsolePatchSettingsToWindow(
+  settings: ConsolePatchSettings,
+): void {
+  window.__REACT_DEVTOOLS_APPEND_COMPONENT_STACK__ =
+    settings.appendComponentStack;
+  window.__REACT_DEVTOOLS_BREAK_ON_CONSOLE_ERRORS__ =
+    settings.breakOnConsoleErrors;
+  window.__REACT_DEVTOOLS_SHOW_INLINE_WARNINGS_AND_ERRORS__ =
+    settings.showInlineWarningsAndErrors;
+  window.__REACT_DEVTOOLS_HIDE_CONSOLE_LOGS_IN_STRICT_MODE__ =
+    settings.hideConsoleLogsInStrictMode;
+  window.__REACT_DEVTOOLS_BROWSER_THEME__ = settings.browserTheme;
 }
